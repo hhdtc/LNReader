@@ -81,13 +81,14 @@ def parse_epub(file_path: str) -> Tuple[str, str, List[dict], Optional[bytes]]:
         item = book.get_item_with_id(item_id)
         if item is None:
             continue
+        item_name = item.get_name() or ""
         item_type = item.get_type()
         # ebooklib assigns ITEM_UNKNOWN to files with media-type="text/html";
         # accept those alongside ITEM_DOCUMENT (application/xhtml+xml)
         if item_type not in HTML_TYPES:
             continue
         if item_type == ebooklib.ITEM_UNKNOWN:
-            ext = os.path.splitext(item.get_name() or "")[1].lower()
+            ext = os.path.splitext(item_name)[1].lower()
             if ext not in HTML_EXTENSIONS:
                 continue
         try:
@@ -118,7 +119,8 @@ def parse_epub(file_path: str) -> Tuple[str, str, List[dict], Optional[bytes]]:
         if content_html.strip():
             chapters.append({
                 "title": chapter_title or f"Chapter {len(chapters) + 1}",
-                "content": content_html
+                "content": content_html,
+                "source_name": item_name,
             })
 
     return title, author, chapters, cover_bytes

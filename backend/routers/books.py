@@ -1,10 +1,13 @@
 import os
 import shutil
+import posixpath
+import mimetypes
 from pathlib import Path
 from typing import List
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
+from urllib.parse import quote
 from database import get_db, Book, ReadingProgress
 from schemas import BookResponse, ChapterContent, ChapterSummary
 from services.book_parser import parse_epub, parse_txt, clear_book_cache
@@ -15,6 +18,45 @@ load_dotenv()
 
 BOOKS_DIR = os.getenv("BOOKS_DIR", "./books")
 router = APIRouter(prefix="/api/books", tags=["books"])
+
+
+def _rewrite_epub_asset_urls(content: str, book_id: int, chapter_source_name: str) -> str:
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(content, "html.parser")
+    base_dir = posixpath.dirname((chapter_source_name or "").replace("\\", "/"))
+
+    # Rewrite relative asset URLs so browser requests go through backend API.
+    targets = [
+        ("img", "src"),
+        ("source", "src"),
+        ("audio", "src"),
+        ("video", "src"),
+        ("image", "href"),
+        ("use", "href"),
+        ("a", "href"),
+    ]
+
+    for tag_name, attr in targets:
+        for tag in soup.find_all(tag_name):
+            raw = tag.get(attr)
+            if not raw:
+                continue
+            lowered = raw.lower()
+            if (
+                lowered.startswith(("http://", "https://", "data:", "blob:", "javascript:", "mailto:", "#"))
+                or raw.startswith("/")
+            ):
+                continue
+
+            normalized = posixpath.normpath(posixpath.join(base_dir, raw))
+            normalized = normalized.lstrip("/")
+            if not normalized or normalized.startswith(".."):
+                continue
+
+            tag[attr] = f"/api/books/{book_id}/asset?path={quote(normalized, safe='')}"
+
+    return str(soup)
 
 
 @router.get("", response_model=List[BookResponse])
@@ -138,6 +180,41 @@ def get_cover(book_id: int, db: Session = Depends(get_db)):
     return FileResponse(cover_full_path, media_type="image/jpeg")
 
 
+@router.get("/{book_id}/asset")
+def get_book_asset(book_id: int, path: str, db: Session = Depends(get_db)):
+    book = db.query(Book).filter(Book.id == book_id).first()
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+    if book.file_type != "epub":
+        raise HTTPException(status_code=400, detail="Assets endpoint only supports EPUB books")
+    if not os.path.exists(book.file_path):
+        raise HTTPException(status_code=404, detail="Book file not found on disk")
+
+    normalized = posixpath.normpath((path or "").replace("\\", "/")).lstrip("/")
+    if not normalized or normalized.startswith(".."):
+        raise HTTPException(status_code=400, detail="Invalid asset path")
+
+    try:
+        import ebooklib
+        from ebooklib import epub
+
+        epub_book = epub.read_epub(book.file_path)
+        for item in epub_book.get_items():
+            item_name = (item.get_name() or "").replace("\\", "/").lstrip("/")
+            if item_name == normalized:
+                media_type = item.media_type
+                if not media_type:
+                    guessed_type, _ = mimetypes.guess_type(item_name)
+                    media_type = guessed_type or "application/octet-stream"
+                return Response(content=item.get_content(), media_type=media_type)
+
+        raise HTTPException(status_code=404, detail="Asset not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading EPUB asset: {str(e)}")
+
+
 @router.get("/{book_id}/content", response_model=ChapterContent)
 def get_chapter(
     book_id: int,
@@ -163,6 +240,10 @@ def get_chapter(
             ch = chapters_list[chapter]
             content = ch["content"]
             chapter_title = ch["title"]
+            source_name = ch.get("source_name", "")
+
+            if content:
+                content = _rewrite_epub_asset_urls(content, book_id, source_name)
 
             if book.total_chapters != total:
                 book.total_chapters = total
