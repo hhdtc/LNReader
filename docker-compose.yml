@@ -6,7 +6,7 @@ services:
     environment:
       - FRONTEND_URL=http://localhost
       - BOOKS_DIR=/app/books
-      - DATABASE_URL=sqlite:///./jpreader.db
+      - DATABASE_URL=sqlite:////app/data/jpreader.db
     volumes:
       - books_data:/app/books
       - db_data:/app/data

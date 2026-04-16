@@ -61,6 +61,7 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
   totalPages = signal(1);
   pagesContent: string[] = [];
   private needsPageRecalc = false;
+  private goToLastPageAfterRecalc = false;
 
   virtualBlocks: string[] = [];
   visibleStart = signal(0);
@@ -526,7 +527,10 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
 
     this.pagesContent = pages;
     this.totalPages.set(pages.length);
-    if (this.currentPage() >= pages.length) {
+    if (this.goToLastPageAfterRecalc) {
+      this.goToLastPageAfterRecalc = false;
+      this.currentPage.set(pages.length - 1);
+    } else if (this.currentPage() >= pages.length) {
       this.currentPage.set(pages.length - 1);
     }
   }
@@ -548,6 +552,7 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
     if (this.currentPage() > 0) {
       this.currentPage.update(p => p - 1);
     } else {
+      this.goToLastPageAfterRecalc = true;
       this.prevChapter();
     }
   }
