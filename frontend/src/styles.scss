@@ -1,0 +1,91 @@
+/* Hypergryph-inspired design tokens */
+:root {
+  --bg-900: #0b0b0b;
+  --bg-800: #111111;
+  --text-100: #ffffff;
+  --text-300: #a0a0a0;
+  --accent-1: #00d1ff;
+  --accent-2: #ff5a3d;
+  --border-weak: rgba(255, 255, 255, 0.1);
+  --glow: 0 0 24px rgba(0, 209, 255, 0.35);
+  --font-heading: 'Space Grotesk', 'Oswald', 'Roboto', sans-serif;
+  --font-body: 'Space Grotesk', 'Roboto', 'Segoe UI', sans-serif;
+}
+
+/* Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Roboto:wght@400;500&display=swap');
+
+/* CSS Reset */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg-900);
+  color: var(--text-100);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 209, 255, 0.3);
+}
+
+/* Selection */
+::selection {
+  background: rgba(0, 209, 255, 0.25);
+  color: var(--text-100);
+}
+
+/* Focus ring */
+:focus-visible {
+  outline: 1px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+/* Reveal animation (applied via JS IntersectionObserver) */
+[data-reveal] {
+  animation: revealUp 450ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes revealUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Utility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}

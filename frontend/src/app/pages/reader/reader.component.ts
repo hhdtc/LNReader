@@ -1,0 +1,696 @@
+import {
+  Component, OnInit, OnDestroy, signal,
+  HostListener, ElementRef, ViewChild, ViewChildren, QueryList, computed, AfterViewChecked
+} from '@angular/core';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { ApiService } from '../../services/api.service';
+import { SettingsService } from '../../services/settings.service';
+import { ChapterCacheService } from '../../services/chapter-cache.service';
+import { Book, ChapterContent, ChapterSummary } from '../../models/book.model';
+
+const BG_PRESETS = [
+  { label: 'Dark', value: '#0b0b0b' },
+  { label: 'Dark Gray', value: '#1a1a1a' },
+  { label: 'Sepia', value: '#f4ecd8' },
+  { label: 'Warm Gray', value: '#e8e4df' },
+  { label: 'Night Blue', value: '#0d1117' },
+  { label: 'White', value: '#ffffff' },
+];
+
+@Component({
+  selector: 'app-reader',
+  imports: [CommonModule, RouterLink, FormsModule],
+  templateUrl: './reader.component.html',
+  styleUrls: ['./reader.component.scss'],
+})
+export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
+  @ViewChild('viewportRef') viewportRef!: ElementRef<HTMLDivElement>;
+  @ViewChild('virtualHostRef') virtualHostRef?: ElementRef<HTMLDivElement>;
+  @ViewChildren('virtualBlockRef') virtualBlockRefs?: QueryList<ElementRef<HTMLDivElement>>;
+
+  book = signal<Book | null>(null);
+  chapter = signal<ChapterContent | null>(null);
+  loading = signal(false);
+  bookId = 0;
+
+  currentChapter = signal(0);
+  annotateJP = signal(false);
+  showSettings = signal(false);
+  showTranslate = signal(false);
+  showChapterPicker = signal(false);
+  selectedText = signal('');
+  translatedText = signal('');
+  translating = signal(false);
+  translateError = signal('');
+  chapterIndexLoading = signal(false);
+  chapterSummaries = signal<ChapterSummary[]>([]);
+
+  bgColor = signal('#0b0b0b');
+  bgPresets = BG_PRESETS;
+  fontSize = signal(18);
+  fontFamily = signal('Space Grotesk');
+  pageWidth = signal(720);
+  lineHeight = signal(1.9);
+
+  // View mode: 'scroll' = long page, 'paginate' = paginated
+  viewMode = signal<'scroll' | 'paginate'>('scroll');
+  currentPage = signal(0);
+  totalPages = signal(1);
+  pagesContent: string[] = [];
+  private needsPageRecalc = false;
+
+  virtualBlocks: string[] = [];
+  visibleStart = signal(0);
+  visibleEnd = signal(-1);
+  topSpacerPx = signal(0);
+  bottomSpacerPx = signal(0);
+  private blockHeights: number[] = [];
+  private prefixHeights: number[] = [0];
+  private needsVirtualMeasure = false;
+  private readonly virtualOverscanPx = 900;
+
+  fontOptions = ['Space Grotesk', 'Georgia', 'Source Han Sans', 'Noto Serif JP', 'Roboto', 'System Default'];
+
+  isLight = computed(() => {
+    const hex = this.bgColor();
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return (r * 299 + g * 587 + b * 114) / 1000 > 128;
+  });
+
+  textColor = computed(() => this.isLight() ? '#1a1a1a' : '#f0f0f0');
+
+  private saveTimer: any;
+
+  constructor(
+    private route: ActivatedRoute,
+    private router: Router,
+    private api: ApiService,
+    public settings: SettingsService,
+    private sanitizer: DomSanitizer,
+    private chapterCache: ChapterCacheService
+  ) {}
+
+  ngOnInit() {
+    this.bookId = Number(this.route.snapshot.paramMap.get('id'));
+    const s = this.settings.settings();
+    this.bgColor.set(s.bg_color || '#0b0b0b');
+    this.fontSize.set(s.font_size || 18);
+    this.fontFamily.set(s.font_family || 'Space Grotesk');
+    this.pageWidth.set(s.page_width || 720);
+    if (s.view_mode === 'paginate') {
+      this.viewMode.set('paginate');
+      this.needsPageRecalc = true;
+    }
+
+    this.api.getBook(this.bookId).subscribe({ next: (b) => this.book.set(b) });
+    this.loadChapterIndex();
+    this.api.getProgress(this.bookId).subscribe({
+      next: (p) => {
+        this.currentChapter.set(p.chapter_index || 0);
+        this.loadChapter(p.chapter_index || 0);
+      },
+      error: () => this.loadChapter(0)
+    });
+  }
+
+  ngOnDestroy() {
+    if (this.saveTimer) clearTimeout(this.saveTimer);
+    this.saveProgress();
+    this.chapterCache.clear();
+  }
+
+  ngAfterViewChecked() {
+    if (this.needsPageRecalc && this.viewMode() === 'paginate' && this.viewportRef) {
+      this.needsPageRecalc = false;
+      setTimeout(() => this.recalcPages(), 0);
+    }
+
+    if (this.needsVirtualMeasure && this.viewMode() === 'scroll') {
+      this.needsVirtualMeasure = false;
+      this.measureVisibleBlocks();
+    }
+  }
+
+  loadChapter(index: number) {
+    this.translatedText.set('');
+    const annotate = this.annotateJP();
+
+    const cached = this.chapterCache.get(this.bookId, index, annotate);
+    if (cached) {
+      this.applyChapter(cached, index);
+      this.prefetchAdjacent(index, annotate);
+      return;
+    }
+
+    this.loading.set(true);
+    this.api.getChapter(this.bookId, index, annotate).subscribe({
+      next: (c) => {
+        this.chapterCache.set(this.bookId, index, annotate, c);
+        this.applyChapter(c, index);
+        this.loading.set(false);
+        this.prefetchAdjacent(index, annotate);
+      },
+      error: () => this.loading.set(false)
+    });
+  }
+
+  private applyChapter(c: ChapterContent, index: number): void {
+    this.chapter.set(c);
+    this.currentChapter.set(index);
+    this.rememberChapterSummary(index, c.chapter_title);
+    this.currentPage.set(0);
+    this.needsPageRecalc = true;
+
+    if (this.viewMode() === 'scroll') {
+      this.initScrollVirtualization(c.content);
+    } else {
+      this.resetVirtualization();
+    }
+
+    setTimeout(() => this.scrollToTop(), 50);
+    this.scheduleSave();
+  }
+
+  private loadChapterIndex(force = false): void {
+    if (!this.bookId || this.chapterIndexLoading()) return;
+    if (!force && this.chapterSummaries().length > 0) return;
+
+    this.chapterIndexLoading.set(true);
+    this.api.getChapterIndex(this.bookId).subscribe({
+      next: (chapters) => {
+        this.chapterSummaries.set(chapters);
+        this.chapterIndexLoading.set(false);
+      },
+      error: () => {
+        this.chapterIndexLoading.set(false);
+      }
+    });
+  }
+
+  private rememberChapterSummary(index: number, title: string): void {
+    const normalized = (title || '').trim() || `Chapter ${index + 1}`;
+    const current = this.chapterSummaries();
+    const found = current.find((chapter) => chapter.chapter_index === index);
+
+    if (found) {
+      if (found.chapter_title !== normalized) {
+        this.chapterSummaries.set(
+          current.map((chapter) => chapter.chapter_index === index ? { ...chapter, chapter_title: normalized } : chapter)
+        );
+      }
+      return;
+    }
+
+    this.chapterSummaries.set([
+      ...current,
+      { chapter_index: index, chapter_title: normalized }
+    ].sort((a, b) => a.chapter_index - b.chapter_index));
+  }
+
+  toggleChapterPicker(event?: MouseEvent): void {
+    event?.stopPropagation();
+    const open = !this.showChapterPicker();
+    this.showChapterPicker.set(open);
+    if (open) this.loadChapterIndex();
+  }
+
+  jumpToChapter(index: number): void {
+    this.showChapterPicker.set(false);
+    if (index === this.currentChapter()) return;
+    this.loadChapter(index);
+  }
+
+  private prefetchAdjacent(current: number, annotate: boolean): void {
+    const total = this.chapter()?.total_chapters ?? 1;
+
+    if (current + 1 < total && !this.chapterCache.get(this.bookId, current + 1, annotate)) {
+      this.api.getChapter(this.bookId, current + 1, annotate).subscribe({
+        next: (c) => this.chapterCache.set(this.bookId, current + 1, annotate, c),
+        error: () => {}
+      });
+    }
+
+    if (current - 1 >= 0 && !this.chapterCache.get(this.bookId, current - 1, annotate)) {
+      this.api.getChapter(this.bookId, current - 1, annotate).subscribe({
+        next: (c) => this.chapterCache.set(this.bookId, current - 1, annotate, c),
+        error: () => {}
+      });
+    }
+  }
+
+  sanitizeContent(html: string): SafeHtml {
+    return this.sanitizer.bypassSecurityTrustHtml(html);
+  }
+
+  prevChapter() {
+    if (this.currentChapter() > 0) this.loadChapter(this.currentChapter() - 1);
+  }
+
+  nextChapter() {
+    const total = this.chapter()?.total_chapters ?? 1;
+    if (this.currentChapter() < total - 1) this.loadChapter(this.currentChapter() + 1);
+  }
+
+  toggleAnnotate() {
+    this.annotateJP.update(v => !v);
+    this.loadChapter(this.currentChapter());
+  }
+
+  scrollToTop() {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  toggleViewMode() {
+    if (this.viewMode() === 'scroll') {
+      this.viewMode.set('paginate');
+      this.currentPage.set(0);
+      this.needsPageRecalc = true;
+      this.resetVirtualization();
+      window.scrollTo({ top: 0 });
+    } else {
+      this.viewMode.set('scroll');
+      if (this.chapter()) {
+        this.initScrollVirtualization(this.chapter()!.content);
+      }
+    }
+    this.settings.update({ view_mode: this.viewMode() });
+  }
+
+  get visibleBlockIndices(): number[] {
+    const start = this.visibleStart();
+    const end = this.visibleEnd();
+    if (end < start || start < 0) return [];
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+  }
+
+  totalVirtualHeight(): number {
+    if (this.prefixHeights.length === 0) return 0;
+    return this.prefixHeights[this.prefixHeights.length - 1];
+  }
+
+  private resetVirtualization(): void {
+    this.virtualBlocks = [];
+    this.blockHeights = [];
+    this.prefixHeights = [0];
+    this.visibleStart.set(0);
+    this.visibleEnd.set(-1);
+    this.topSpacerPx.set(0);
+    this.bottomSpacerPx.set(0);
+    this.needsVirtualMeasure = false;
+  }
+
+  private initScrollVirtualization(content: string): void {
+    this.virtualBlocks = this.splitHtmlIntoChunks(content);
+    this.blockHeights = this.virtualBlocks.map((block) => this.estimateBlockHeight(block));
+    this.rebuildPrefixHeights();
+    this.visibleStart.set(0);
+    this.visibleEnd.set(Math.min(this.virtualBlocks.length - 1, 8));
+    this.topSpacerPx.set(0);
+    this.bottomSpacerPx.set(Math.max(0, this.totalVirtualHeight() - (this.prefixHeights[this.visibleEnd() + 1] || 0)));
+
+    setTimeout(() => {
+      this.updateVirtualWindow(true);
+    }, 0);
+  }
+
+  private splitHtmlIntoChunks(content: string): string[] {
+    const temp = document.createElement('div');
+    temp.innerHTML = content;
+
+    const children = Array.from(temp.childNodes).filter((node) => {
+      return node.nodeType !== Node.TEXT_NODE || !!node.textContent?.trim();
+    });
+
+    if (children.length === 0) return [content];
+
+    const nodesToHtml = (nodes: Node[]): string => {
+      const wrapper = document.createElement('div');
+      nodes.forEach((node) => wrapper.appendChild(node.cloneNode(true)));
+      return wrapper.innerHTML;
+    };
+
+    const chunks: string[] = [];
+    let currentChunk: Node[] = [];
+    let currentChars = 0;
+    const maxNodesPerChunk = 14;
+    const targetCharsPerChunk = 2600;
+
+    for (const child of children) {
+      const childChars = (child.textContent || '').trim().length;
+      const normalizedChars = Math.max(childChars, 80);
+
+      if (
+        currentChunk.length > 0 &&
+        (currentChunk.length >= maxNodesPerChunk || currentChars + normalizedChars > targetCharsPerChunk)
+      ) {
+        chunks.push(nodesToHtml(currentChunk));
+        currentChunk = [];
+        currentChars = 0;
+      }
+
+      currentChunk.push(child);
+      currentChars += normalizedChars;
+    }
+
+    if (currentChunk.length > 0) {
+      chunks.push(nodesToHtml(currentChunk));
+    }
+
+    return chunks.length > 0 ? chunks : [content];
+  }
+
+  private estimateBlockHeight(html: string): number {
+    const plainText = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    const contentWidth = Math.max(320, this.pageWidth() - 48);
+    const avgCharWidth = Math.max(6, this.fontSize() * 0.55);
+    const charsPerLine = Math.max(12, Math.floor(contentWidth / avgCharWidth));
+    const lines = Math.max(1, Math.ceil(plainText.length / charsPerLine));
+    const base = lines * this.fontSize() * this.lineHeight();
+
+    const headingBoost = (html.match(/<h[1-6][\s>]/gi)?.length ?? 0) * this.fontSize() * 1.8;
+    const mediaBoost = (html.match(/<(img|table|blockquote|pre)[\s>]/gi)?.length ?? 0) * this.fontSize() * 7.5;
+    return Math.max(this.fontSize() * this.lineHeight() * 1.2, base + headingBoost + mediaBoost + 18);
+  }
+
+  private rebuildPrefixHeights(): void {
+    const prefix: number[] = [0];
+    for (const height of this.blockHeights) {
+      prefix.push(prefix[prefix.length - 1] + height);
+    }
+    this.prefixHeights = prefix;
+  }
+
+  private findBlockIndexAtOffset(offset: number): number {
+    if (this.blockHeights.length === 0) return -1;
+    if (offset <= 0) return 0;
+
+    let low = 0;
+    let high = this.blockHeights.length - 1;
+
+    while (low <= high) {
+      const mid = (low + high) >> 1;
+      const start = this.prefixHeights[mid];
+      const end = this.prefixHeights[mid + 1];
+
+      if (offset < start) {
+        high = mid - 1;
+      } else if (offset >= end) {
+        low = mid + 1;
+      } else {
+        return mid;
+      }
+    }
+
+    return Math.max(0, Math.min(this.blockHeights.length - 1, low));
+  }
+
+  private updateVirtualWindow(markForMeasure: boolean): void {
+    if (!this.virtualHostRef || this.virtualBlocks.length === 0) return;
+
+    const host = this.virtualHostRef.nativeElement;
+    const hostTop = host.getBoundingClientRect().top + window.scrollY;
+    const viewportTop = Math.max(0, window.scrollY - hostTop);
+    const viewportBottom = viewportTop + window.innerHeight;
+    const startOffset = Math.max(0, viewportTop - this.virtualOverscanPx);
+    const endOffset = Math.max(0, viewportBottom + this.virtualOverscanPx);
+
+    const nextStart = this.findBlockIndexAtOffset(startOffset);
+    const nextEnd = this.findBlockIndexAtOffset(endOffset);
+
+    this.visibleStart.set(nextStart);
+    this.visibleEnd.set(Math.max(nextStart, nextEnd));
+
+    const topSpacer = this.prefixHeights[nextStart] || 0;
+    const consumed = this.prefixHeights[Math.max(nextStart, nextEnd) + 1] || this.totalVirtualHeight();
+    const bottomSpacer = Math.max(0, this.totalVirtualHeight() - consumed);
+
+    this.topSpacerPx.set(topSpacer);
+    this.bottomSpacerPx.set(bottomSpacer);
+
+    if (markForMeasure) {
+      this.needsVirtualMeasure = true;
+    }
+  }
+
+  private measureVisibleBlocks(): void {
+    if (!this.virtualBlockRefs || this.virtualBlockRefs.length === 0) return;
+
+    let changed = false;
+    for (const ref of this.virtualBlockRefs.toArray()) {
+      const el = ref.nativeElement;
+      const idx = Number(el.getAttribute('data-idx'));
+      if (Number.isNaN(idx) || idx < 0 || idx >= this.blockHeights.length) continue;
+
+      const measured = Math.ceil(el.getBoundingClientRect().height);
+      if (measured > 0 && Math.abs(measured - this.blockHeights[idx]) > 2) {
+        this.blockHeights[idx] = measured;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      this.rebuildPrefixHeights();
+      this.updateVirtualWindow(false);
+    }
+  }
+
+  private refreshScrollVirtualizationLayout(): void {
+    if (this.viewMode() !== 'scroll' || this.virtualBlocks.length === 0) return;
+    this.blockHeights = this.virtualBlocks.map((block) => this.estimateBlockHeight(block));
+    this.rebuildPrefixHeights();
+    this.updateVirtualWindow(true);
+  }
+
+  recalcPages() {
+    if (!this.viewportRef || !this.chapter()) return;
+    const viewport = this.viewportRef.nativeElement as HTMLDivElement;
+    const vpHeight = viewport.clientHeight;
+    if (vpHeight <= 0) return;
+
+    const content = this.chapter()!.content;
+
+    // Hidden measurer with same styles as reading area
+    const measurer = document.createElement('div');
+    measurer.style.cssText = `
+      position:absolute; visibility:hidden; z-index:-1;
+      width:${this.pageWidth()}px; max-width:${this.pageWidth()}px;
+      font-size:${this.fontSize()}px;
+      font-family:${this.fontFamily()}, Georgia, serif;
+      line-height:${this.lineHeight()};
+      padding:40px 24px; box-sizing:border-box;
+    `;
+    document.body.appendChild(measurer);
+
+    // Parse chapter HTML into top-level nodes
+    const temp = document.createElement('div');
+    temp.innerHTML = content;
+    const children = Array.from(temp.childNodes);
+
+    const nodesToHtml = (nodes: Node[]): string => {
+      const d = document.createElement('div');
+      nodes.forEach(n => d.appendChild(n.cloneNode(true)));
+      return d.innerHTML;
+    };
+
+    const pages: string[] = [];
+    let pageNodes: Node[] = [];
+
+    for (const child of children) {
+      // Skip empty text nodes
+      if (child.nodeType === Node.TEXT_NODE && !child.textContent?.trim()) continue;
+
+      const testNodes = [...pageNodes, child];
+      measurer.innerHTML = nodesToHtml(testNodes);
+
+      if (measurer.scrollHeight > vpHeight && pageNodes.length > 0) {
+        // Current page is full, save it and start new page
+        pages.push(nodesToHtml(pageNodes));
+        pageNodes = [child];
+      } else {
+        pageNodes.push(child);
+      }
+    }
+
+    if (pageNodes.length > 0) {
+      pages.push(nodesToHtml(pageNodes));
+    }
+
+    document.body.removeChild(measurer);
+
+    if (pages.length === 0) pages.push(content);
+
+    this.pagesContent = pages;
+    this.totalPages.set(pages.length);
+    if (this.currentPage() >= pages.length) {
+      this.currentPage.set(pages.length - 1);
+    }
+  }
+
+  goToPage(page: number) {
+    if (page < 0 || page >= this.totalPages()) return;
+    this.currentPage.set(page);
+  }
+
+  nextPage() {
+    if (this.currentPage() < this.totalPages() - 1) {
+      this.currentPage.update(p => p + 1);
+    } else {
+      this.nextChapter();
+    }
+  }
+
+  prevPage() {
+    if (this.currentPage() > 0) {
+      this.currentPage.update(p => p - 1);
+    } else {
+      this.prevChapter();
+    }
+  }
+
+  scheduleSave() {
+    if (this.saveTimer) clearTimeout(this.saveTimer);
+    this.saveTimer = setTimeout(() => this.saveProgress(), 2000);
+  }
+
+  saveProgress() {
+    if (!this.bookId) return;
+    this.api.updateProgress(this.bookId, {
+      chapter_index: this.currentChapter(),
+      page_index: 0,
+      scroll_position: window.scrollY
+    }).subscribe();
+  }
+
+  @HostListener('window:scroll')
+  onScroll() {
+    if (this.viewMode() === 'scroll') {
+      this.scheduleSave();
+      this.updateVirtualWindow(true);
+    }
+  }
+
+  @HostListener('window:resize')
+  onResize() {
+    if (this.viewMode() === 'paginate') {
+      this.recalcPages();
+    } else {
+      this.refreshScrollVirtualizationLayout();
+    }
+  }
+
+  @HostListener('window:keydown', ['$event'])
+  onKeyDown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && this.showChapterPicker()) {
+      this.showChapterPicker.set(false);
+      return;
+    }
+
+    if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return;
+    if (this.viewMode() === 'paginate') {
+      // Paginated: left/right navigate pages (overflow into chapters)
+      if (e.key === 'ArrowRight') { e.preventDefault(); this.nextPage(); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); this.prevPage(); }
+    } else {
+      // Scroll: up/down scroll the page, left/right switch chapters
+      if (e.key === 'ArrowRight') { e.preventDefault(); this.nextChapter(); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); this.prevChapter(); }
+      // ArrowUp/ArrowDown: let browser handle native scroll
+    }
+  }
+
+  @HostListener('mouseup')
+  onMouseUp() {
+    const sel = window.getSelection()?.toString().trim();
+    if (sel && sel.length > 0 && sel.length < 1000) {
+      this.selectedText.set(sel);
+    }
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement | null;
+    if (!target?.closest('.chapter-picker')) {
+      this.showChapterPicker.set(false);
+    }
+  }
+
+  onBgChange(value: string) {
+    this.bgColor.set(value);
+    this.settings.update({ bg_color: value });
+  }
+
+  onFontSizeChange(delta: number) {
+    const val = Math.max(12, Math.min(30, this.fontSize() + delta));
+    this.fontSize.set(val);
+    this.settings.update({ font_size: val });
+    if (this.viewMode() === 'paginate') {
+      this.needsPageRecalc = true;
+    } else {
+      this.refreshScrollVirtualizationLayout();
+    }
+  }
+
+  onFontChange(family: string) {
+    this.fontFamily.set(family);
+    this.settings.update({ font_family: family });
+    if (this.viewMode() === 'paginate') {
+      this.needsPageRecalc = true;
+    } else {
+      this.refreshScrollVirtualizationLayout();
+    }
+  }
+
+  onPageWidthChange(w: number) {
+    this.pageWidth.set(w);
+    this.settings.update({ page_width: w });
+    if (this.viewMode() === 'paginate') {
+      this.needsPageRecalc = true;
+    } else {
+      this.refreshScrollVirtualizationLayout();
+    }
+  }
+
+  translateSelected() {
+    const text = this.selectedText();
+    if (!text) return;
+    const s = this.settings.settings();
+    if (!s.translation_api_key) {
+      this.translateError.set('No API key set. Go to Settings to add one.');
+      return;
+    }
+    this.translating.set(true);
+    this.translateError.set('');
+    this.api.translate({
+      text,
+      source_lang: this.book()?.language === 'ja' ? 'ja' : 'auto',
+      target_lang: s.translation_target_lang || 'en',
+      provider: s.translation_provider || 'deepl',
+      api_key: s.translation_api_key
+    }).subscribe({
+      next: (r) => {
+        this.translatedText.set(r.translated_text);
+        this.translating.set(false);
+      },
+      error: () => {
+        this.translateError.set('Translation failed. Check your API key.');
+        this.translating.set(false);
+      }
+    });
+  }
+
+  clearSelection() {
+    this.selectedText.set('');
+    this.translatedText.set('');
+    this.translateError.set('');
+  }
+
+  get progress(): number {
+    const total = this.chapter()?.total_chapters ?? 1;
+    return Math.round(((this.currentChapter() + 1) / total) * 100);
+  }
+}

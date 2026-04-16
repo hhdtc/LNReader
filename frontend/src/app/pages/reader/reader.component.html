@@ -1,0 +1,310 @@
+<div class="reader-page" [class.paginate-active]="viewMode() === 'paginate'" [style.background]="bgColor()" [style.color]="textColor()">
+
+  <!-- TOP BAR -->
+  <header class="reader-header" [class.light]="isLight()">
+    <div class="header-left">
+      <a routerLink="/library" class="btn-back" [class.light]="isLight()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M19 12H5M12 5l-7 7 7 7"/>
+        </svg>
+        <span>LIBRARY</span>
+      </a>
+      <div class="book-info" *ngIf="book()">
+        <span class="book-title-sm">{{ book()!.title }}</span>
+      </div>
+
+      <div class="chapter-picker" *ngIf="chapter()">
+        <button
+          class="chapter-info chapter-info-btn"
+          [class.light]="isLight()"
+          [class.open]="showChapterPicker()"
+          (click)="toggleChapterPicker($event)">
+          <span>CH {{ currentChapter() + 1 }}/{{ chapter()!.total_chapters }}</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+
+        @if (showChapterPicker()) {
+          <div class="chapter-picker-panel" [class.light]="isLight()" (click)="$event.stopPropagation()">
+            @if (chapterIndexLoading() && chapterSummaries().length === 0) {
+              <div class="chapter-picker-loading">LOADING CHAPTERS...</div>
+            } @else {
+              @for (item of chapterSummaries(); track item.chapter_index) {
+                <button
+                  class="chapter-picker-item"
+                  [class.active]="item.chapter_index === currentChapter()"
+                  [class.light]="isLight()"
+                  (click)="jumpToChapter(item.chapter_index)">
+                  <span class="picker-index">{{ item.chapter_index + 1 }}</span>
+                  <span class="picker-title">{{ item.chapter_title || ('Chapter ' + (item.chapter_index + 1)) }}</span>
+                </button>
+              }
+            }
+          </div>
+        }
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <!-- Japanese annotation toggle (only for JP books) -->
+      @if (book()?.language === 'ja') {
+        <button
+          class="btn-icon"
+          [class.active]="annotateJP()"
+          [class.light]="isLight()"
+          (click)="toggleAnnotate()"
+          title="Toggle Japanese annotation">
+          <span class="jp-badge">日</span>
+        </button>
+      }
+
+      <!-- Translate panel toggle -->
+      <button
+        class="btn-icon"
+        [class.active]="showTranslate()"
+        [class.light]="isLight()"
+        (click)="showTranslate.update(v => !v)"
+        title="Translate">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M5 8l6 6M4 14l6-6 2-3"/>
+          <path d="M2 5h12M9 2v3M14 21l2-5 2 5M16.6 19h2.8"/>
+        </svg>
+      </button>
+
+      <!-- View mode toggle -->
+      <button
+        class="btn-icon"
+        [class.light]="isLight()"
+        (click)="toggleViewMode()"
+        [title]="viewMode() === 'scroll' ? 'Switch to paginated view' : 'Switch to scroll view'">
+        @if (viewMode() === 'scroll') {
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+            <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+          </svg>
+        } @else {
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        }
+      </button>
+
+      <!-- Settings toggle -->
+      <button
+        class="btn-icon"
+        [class.active]="showSettings()"
+        [class.light]="isLight()"
+        (click)="showSettings.update(v => !v)"
+        title="Reader settings">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- PROGRESS BAR -->
+  <div class="progress-bar">
+    <div class="progress-fill" [style.width.%]="progress"></div>
+  </div>
+
+  <!-- SETTINGS PANEL -->
+  @if (showSettings()) {
+    <div class="settings-panel" [class.light]="isLight()">
+      <div class="settings-section">
+        <label class="settings-label">BACKGROUND</label>
+        <div class="bg-presets">
+          @for (preset of bgPresets; track preset.value) {
+            <button
+              class="bg-swatch"
+              [style.background]="preset.value"
+              [class.active]="bgColor() === preset.value"
+              (click)="onBgChange(preset.value)"
+              [title]="preset.label">
+            </button>
+          }
+        </div>
+        <div class="custom-color">
+          <label class="settings-label-sm">CUSTOM</label>
+          <input type="color" [value]="bgColor()" (input)="onBgChange($any($event.target).value)">
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <label class="settings-label">FONT SIZE — {{ fontSize() }}px</label>
+        <div class="font-size-controls">
+          <button class="btn-size" (click)="onFontSizeChange(-1)">A−</button>
+          <div class="size-track">
+            <div class="size-fill" [style.width.%]="((fontSize() - 12) / 18) * 100"></div>
+          </div>
+          <button class="btn-size" (click)="onFontSizeChange(1)">A+</button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <label class="settings-label">FONT</label>
+        <select class="font-select" [value]="fontFamily()" (change)="onFontChange($any($event.target).value)">
+          @for (f of fontOptions; track f) {
+            <option [value]="f">{{ f }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="settings-section">
+        <label class="settings-label">WIDTH — {{ pageWidth() }}px</label>
+        <div class="width-options">
+          @for (w of [600, 720, 900, 1100]; track w) {
+            <button class="btn-width" [class.active]="pageWidth() === w" (click)="onPageWidthChange(w)">{{ w }}</button>
+          }
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- TRANSLATE PANEL -->
+  @if (showTranslate()) {
+    <div class="translate-panel" [class.light]="isLight()">
+      <div class="translate-header">
+        <span class="translate-title">TRANSLATION</span>
+        <button class="btn-close" (click)="showTranslate.set(false)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      @if (selectedText()) {
+        <div class="translate-source">
+          <div class="translate-label">SELECTED TEXT</div>
+          <p class="selected-preview">{{ selectedText() | slice:0:200 }}{{ selectedText().length > 200 ? '...' : '' }}</p>
+          <div class="translate-actions">
+            <button class="btn-translate" (click)="translateSelected()" [disabled]="translating()">
+              @if (translating()) { TRANSLATING... } @else { TRANSLATE }
+            </button>
+            <button class="btn-clear" (click)="clearSelection()">CLEAR</button>
+          </div>
+        </div>
+
+        @if (translating()) {
+          <div class="translate-loading">
+            <div class="loading-dots">
+              <span></span><span></span><span></span>
+            </div>
+          </div>
+        }
+
+        @if (translateError()) {
+          <div class="translate-error">{{ translateError() }}</div>
+        }
+
+        @if (translatedText()) {
+          <div class="translate-result">
+            <div class="translate-label">TRANSLATION</div>
+            <p class="translated-text">{{ translatedText() }}</p>
+          </div>
+        }
+      } @else {
+        <div class="translate-hint">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5">
+            <path d="M5 8l6 6M4 14l6-6 2-3"/><path d="M2 5h12M9 2v3M14 21l2-5 2 5M16.6 19h2.8"/>
+          </svg>
+          <span>Select text in the reader to translate it</span>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- CHAPTER CONTENT -->
+  <div class="reader-scroll" [class.paginate-mode]="viewMode() === 'paginate'">
+    @if (loading()) {
+      <div class="chapter-loading">
+        <div class="loading-spinner"></div>
+        <span>LOADING CHAPTER...</span>
+      </div>
+    } @else if (chapter()) {
+
+      @if (viewMode() === 'paginate') {
+        <!-- PAGINATED VIEW -->
+        <div class="paginate-container" [style.max-width.px]="pageWidth()">
+          <div class="paginate-viewport" #viewportRef>
+            @if (pagesContent.length > 0) {
+              <article
+                class="chapter-content"
+                [style.font-size.px]="fontSize()"
+                [style.font-family]="fontFamily() + ', Georgia, serif'"
+                [style.line-height]="lineHeight()"
+                [style.max-width.px]="pageWidth()"
+                [innerHTML]="sanitizeContent(pagesContent[currentPage()])">
+              </article>
+            }
+          </div>
+
+          <!-- PAGE NAV -->
+          <div class="page-nav">
+            <button
+              class="btn-nav compact"
+              [class.light]="isLight()"
+              (click)="prevPage()"
+              [disabled]="currentPage() === 0 && currentChapter() === 0">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 12H5M12 5l-7 7 7 7"/>
+              </svg>
+              PREV
+            </button>
+
+            <div class="page-indicator">
+              <span class="page-num">{{ currentPage() + 1 }}</span>
+              <span class="chapter-sep">/</span>
+              <span class="page-total">{{ totalPages() }}</span>
+              <span class="page-chapter-info">(CH {{ currentChapter() + 1 }})</span>
+            </div>
+
+            <button
+              class="btn-nav compact"
+              [class.light]="isLight()"
+              (click)="nextPage()"
+              [disabled]="currentPage() >= totalPages() - 1 && currentChapter() >= chapter()!.total_chapters - 1">
+              NEXT
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M5 12h14M12 5l7 7-7 7"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      } @else {
+        <!-- SCROLL VIEW -->
+        <article
+          #virtualHostRef
+          class="chapter-content chapter-content-virtual"
+          [style.max-width.px]="pageWidth()"
+          [style.font-size.px]="fontSize()"
+          [style.font-family]="fontFamily() + ', Georgia, serif'"
+          [style.line-height]="lineHeight()">
+          <div class="virtual-spacer" [style.height.px]="topSpacerPx()"></div>
+
+          @for (blockIndex of visibleBlockIndices; track blockIndex) {
+            <div
+              #virtualBlockRef
+              class="virtual-block"
+              [attr.data-idx]="blockIndex"
+              [innerHTML]="sanitizeContent(virtualBlocks[blockIndex])">
+            </div>
+          }
+
+          <div class="virtual-spacer" [style.height.px]="bottomSpacerPx()"></div>
+        </article>
+      }
+    }
+  </div>
+
+  <!-- KEYBOARD SHORTCUTS HINT -->
+  <div class="shortcuts-hint" [class.light]="isLight()">
+    @if (viewMode() === 'paginate') {
+      ← → NAVIGATE PAGES
+    } @else {
+      ↑ ↓ SCROLL &nbsp; ← → NAVIGATE CHAPTERS
+    }
+  </div>
+</div>

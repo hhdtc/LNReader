@@ -1,0 +1,132 @@
+<div class="library-page">
+  <!-- HEADER -->
+  <header class="site-header">
+    <div class="header-brand">
+      <svg width="24" height="24" viewBox="0 0 40 40" fill="none">
+        <rect x="4" y="4" width="32" height="32" rx="2" stroke="#00d1ff" stroke-width="1.5"/>
+        <path d="M12 28L20 12L28 28M15 23H25" stroke="#00d1ff" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <span class="header-title">jpReader</span>
+    </div>
+    <nav class="header-nav">
+      <a routerLink="/library" class="nav-link active">LIBRARY</a>
+      <a routerLink="/settings" class="nav-link">SETTINGS</a>
+    </nav>
+    <div class="header-user" *ngIf="auth.user()">
+      <img [src]="auth.user()!.picture" [alt]="auth.user()!.name" class="user-avatar" (error)="$any($event.target).style.display='none'">
+      <span class="user-name">{{ auth.user()!.name }}</span>
+      <button class="btn-logout" (click)="auth.logout()">LOGOUT</button>
+    </div>
+  </header>
+
+  <!-- MAIN CONTENT -->
+  <main class="library-main">
+    <!-- PAGE TITLE -->
+    <div class="page-header" data-reveal>
+      <div class="page-title-group">
+        <span class="page-label">READING STATION</span>
+        <h1 class="page-title">YOUR LIBRARY</h1>
+      </div>
+      <div class="title-decoration">
+        <div class="deco-line"></div>
+        <span class="book-count">{{ books().length }} VOLUMES</span>
+      </div>
+    </div>
+
+    <!-- UPLOAD ZONE -->
+    <div
+      class="upload-zone"
+      [class.drag-over]="dragOver()"
+      [class.uploading]="uploading()"
+      (dragover)="onDragOver($event)"
+      (dragleave)="onDragLeave()"
+      (drop)="onDrop($event)"
+      (click)="fileInput.click()"
+      data-reveal
+    >
+      <input #fileInput type="file" accept=".epub,.txt" (change)="onFileSelect($event)" hidden>
+      <div class="upload-icon">
+        @if (uploading()) {
+          <div class="upload-spinner"></div>
+        } @else {
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+        }
+      </div>
+      <div class="upload-text">
+        @if (uploading()) {
+          <span class="upload-primary">UPLOADING...</span>
+        } @else {
+          <span class="upload-primary">DROP FILE OR CLICK TO UPLOAD</span>
+          <span class="upload-secondary">SUPPORTS EPUB &amp; TXT</span>
+        }
+      </div>
+    </div>
+
+    <!-- ERROR -->
+    @if (error()) {
+      <div class="error-banner">
+        <span class="error-icon">!</span>
+        {{ error() }}
+      </div>
+    }
+
+    <!-- BOOKS GRID -->
+    @if (loading()) {
+      <div class="loading-state">
+        <div class="loading-spinner"></div>
+        <span>LOADING LIBRARY...</span>
+      </div>
+    } @else if (books().length === 0) {
+      <div class="empty-state" data-reveal>
+        <div class="empty-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+          </svg>
+        </div>
+        <h3>NO VOLUMES IN LIBRARY</h3>
+        <p>Upload your first EPUB or TXT file to get started</p>
+      </div>
+    } @else {
+      <div class="books-grid">
+        @for (book of books(); track book.id) {
+          <div class="book-card" (click)="openBook(book)" data-reveal>
+            <div class="book-cover">
+              @if (book.cover_path) {
+                <img [src]="getCoverUrl(book)" [alt]="book.title" loading="lazy">
+              } @else {
+                <div class="book-cover-placeholder">
+                  <span class="book-type-badge">{{ book.file_type.toUpperCase() }}</span>
+                  <div class="cover-title">{{ book.title | slice:0:30 }}</div>
+                </div>
+              }
+              @if (book.language === 'ja') {
+                <div class="lang-badge">日</div>
+              }
+            </div>
+            <div class="book-info">
+              <h3 class="book-title">{{ book.title }}</h3>
+              <p class="book-author">{{ book.author }}</p>
+              <div class="book-meta">
+                <span class="meta-chapters">{{ book.total_chapters }} CH</span>
+                <span class="meta-date">{{ formatDate(book.uploaded_at) }}</span>
+              </div>
+            </div>
+            <button class="btn-delete" (click)="deleteBook(book, $event)" title="Delete">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6l-1 14H6L5 6"/>
+                <path d="M10 11v6M14 11v6"/>
+                <path d="M9 6V4h6v2"/>
+              </svg>
+            </button>
+          </div>
+        }
+      </div>
+    }
+  </main>
+</div>

@@ -1,0 +1,140 @@
+<div class="settings-page">
+  <header class="site-header">
+    <div class="header-brand">
+      <svg width="24" height="24" viewBox="0 0 40 40" fill="none">
+        <rect x="4" y="4" width="32" height="32" rx="2" stroke="#00d1ff" stroke-width="1.5"/>
+        <path d="M12 28L20 12L28 28M15 23H25" stroke="#00d1ff" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <span class="header-title">jpReader</span>
+    </div>
+    <nav class="header-nav">
+      <a routerLink="/library" class="nav-link">LIBRARY</a>
+      <a routerLink="/settings" class="nav-link active">SETTINGS</a>
+    </nav>
+    <div class="header-user" *ngIf="auth.user()">
+      <img [src]="auth.user()!.picture" [alt]="auth.user()!.name" class="user-avatar" (error)="$any($event.target).style.display='none'">
+      <span class="user-name">{{ auth.user()!.name }}</span>
+      <button class="btn-logout" (click)="auth.logout()">LOGOUT</button>
+    </div>
+  </header>
+
+  <main class="settings-main">
+    <div class="page-header" data-reveal>
+      <span class="page-label">SYSTEM CONFIGURATION</span>
+      <h1 class="page-title">SETTINGS</h1>
+    </div>
+
+    <!-- ACCOUNT -->
+    <section class="settings-card" data-reveal>
+      <div class="card-label">
+        <div class="label-dot"></div>
+        <span>ACCOUNT</span>
+      </div>
+      <div class="card-body" *ngIf="auth.user(); else noUser">
+        <div class="user-row">
+          <img [src]="auth.user()!.picture" class="avatar-lg" [alt]="auth.user()!.name" (error)="$any($event.target).style.display='none'">
+          <div>
+            <div class="user-name-lg">{{ auth.user()!.name }}</div>
+            <div class="user-email">{{ auth.user()!.email }}</div>
+            <div class="auth-status">
+              <span class="status-dot"></span>
+              AUTHENTICATED VIA GOOGLE
+            </div>
+          </div>
+        </div>
+      </div>
+      <ng-template #noUser>
+        <div class="card-body">
+          <p class="hint-text">Not signed in.</p>
+        </div>
+      </ng-template>
+    </section>
+
+    <!-- TRANSLATION -->
+    <section class="settings-card" data-reveal>
+      <div class="card-label">
+        <div class="label-dot"></div>
+        <span>TRANSLATION ENGINE</span>
+      </div>
+      <div class="card-body">
+        <!-- Provider select -->
+        <div class="field-group">
+          <label class="field-label">PROVIDER</label>
+          <div class="provider-options">
+            @for (p of providers; track p.value) {
+              <button
+                class="provider-btn"
+                [class.active]="provider() === p.value"
+                (click)="provider.set(p.value)">
+                <span class="provider-name">{{ p.label }}</span>
+                <span class="provider-desc">{{ p.desc }}</span>
+              </button>
+            }
+          </div>
+        </div>
+
+        <!-- API Key -->
+        <div class="field-group">
+          <label class="field-label">API KEY FOR {{ getProviderLabel(provider()) | uppercase }}</label>
+          <div class="key-input-row">
+            <input
+              [type]="showKey() ? 'text' : 'password'"
+              class="field-input"
+              [value]="apiKey()"
+              (input)="apiKey.set($any($event.target).value)"
+              [placeholder]="provider() === 'deepl' ? 'your-deepl-key:fx' : provider() === 'openai' ? 'sk-...' : 'AIzaSy...'">
+            <button class="btn-toggle-key" (click)="showKey.update(v => !v)">
+              {{ showKey() ? 'HIDE' : 'SHOW' }}
+            </button>
+          </div>
+          <p class="field-hint">
+            @switch (provider()) {
+              @case ('deepl') { Get your key at <strong>deepl.com/pro-api</strong>. Free tier: 500k chars/month. }
+              @case ('google') { Google Cloud Translation API key from <strong>console.cloud.google.com</strong>. }
+              @case ('openai') { OpenAI API key from <strong>platform.openai.com</strong>. Uses gpt-4o-mini. }
+            }
+          </p>
+        </div>
+
+        <!-- Target language -->
+        <div class="field-group">
+          <label class="field-label">TRANSLATE INTO</label>
+          <select class="field-select" [value]="targetLang()" (change)="targetLang.set($any($event.target).value)">
+            @for (lang of languages; track lang.value) {
+              <option [value]="lang.value">{{ lang.label }}</option>
+            }
+          </select>
+        </div>
+
+        <!-- Save button -->
+        <div class="save-row">
+          <button class="btn-save" (click)="save()" [class.saved]="saved()">
+            @if (saved()) {
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              SAVED
+            } @else {
+              SAVE SETTINGS
+            }
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECURITY NOTE -->
+    <section class="settings-card info-card" data-reveal>
+      <div class="card-label">
+        <div class="label-dot accent2"></div>
+        <span>SECURITY NOTE</span>
+      </div>
+      <div class="card-body">
+        <p class="hint-text">
+          Your API key is stored in a local SQLite database on this machine.
+          This app sends translation requests from the backend server to the translation provider.
+          No data is sent to any third-party service except when you explicitly translate text.
+        </p>
+      </div>
+    </section>
+  </main>
+</div>
