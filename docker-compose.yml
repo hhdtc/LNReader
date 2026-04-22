@@ -32,9 +32,29 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  tts:
+    image: xxxxrt666/gpt-sovits:latest-cu128
+    container_name: jpreader-tts
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    ports:
+      - "9874:9874"  # WebUI control panel
+      - "9880:9880"  # API server
+    volumes:
+      - tts_models:/workspace/GPT-SoVITS
+    shm_size: "16g"
+    working_dir: /workspace/GPT-SoVITS
+    command: >
+      bash -c "python webui.py & python api_v2.py -a 0.0.0.0 -p 9880 && wait"
+    networks:
+      - app-net
+    restart: unless-stopped
+
 volumes:
   books_data:
   db_data:
+  tts_models:
 
 networks:
   app-net:
