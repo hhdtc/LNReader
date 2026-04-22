@@ -44,6 +44,14 @@
           </div>
         }
       </div>
+
+      @if (viewMode() === 'paginate' && chapter()) {
+        <div class="page-indicator-header" [class.light]="isLight()">
+          <span class="page-num">{{ currentPage() + 1 }}</span>
+          <span class="chapter-sep">/</span>
+          <span class="page-total">{{ totalPages() }}</span>
+        </div>
+      }
     </div>
 
     <div class="header-actions">
@@ -153,10 +161,10 @@
       </div>
 
       <div class="settings-section">
-        <label class="settings-label">WIDTH — {{ pageWidth() }}px</label>
+        <label class="settings-label">WIDTH — {{ pageWidthPct() }}%</label>
         <div class="width-options">
-          @for (w of [600, 720, 900, 1100]; track w) {
-            <button class="btn-width" [class.active]="pageWidth() === w" (click)="onPageWidthChange(w)">{{ w }}</button>
+          @for (w of widthOptions; track w) {
+            <button class="btn-width" [class.active]="pageWidthPct() === w" (click)="onPageWidthPctChange(w)">{{ w }}%</button>
           }
         </div>
       </div>
@@ -227,58 +235,28 @@
 
       @if (viewMode() === 'paginate') {
         <!-- PAGINATED VIEW -->
-        <div class="paginate-container" [style.max-width.px]="pageWidth()">
+        <div class="paginate-container" [style.max-width]="pageWidthPct() + '%'">
           <div class="paginate-viewport" #viewportRef>
-            @if (pagesContent.length > 0) {
+            @if (pagesContent().length > 0) {
               <article
                 class="chapter-content"
                 [style.font-size.px]="fontSize()"
                 [style.font-family]="fontFamily() + ', Georgia, serif'"
                 [style.line-height]="lineHeight()"
-                [style.max-width.px]="pageWidth()"
-                [innerHTML]="sanitizeContent(pagesContent[currentPage()])">
+                [style.max-width]="pageWidthPct() + '%'"
+                [innerHTML]="sanitizeContent(pagesContent()[currentPage()])">
               </article>
             }
           </div>
 
-          <!-- PAGE NAV -->
-          <div class="page-nav">
-            <button
-              class="btn-nav compact"
-              [class.light]="isLight()"
-              (click)="prevPage()"
-              [disabled]="currentPage() === 0 && currentChapter() === 0">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M19 12H5M12 5l-7 7 7 7"/>
-              </svg>
-              PREV
-            </button>
-
-            <div class="page-indicator">
-              <span class="page-num">{{ currentPage() + 1 }}</span>
-              <span class="chapter-sep">/</span>
-              <span class="page-total">{{ totalPages() }}</span>
-              <span class="page-chapter-info">(CH {{ currentChapter() + 1 }})</span>
-            </div>
-
-            <button
-              class="btn-nav compact"
-              [class.light]="isLight()"
-              (click)="nextPage()"
-              [disabled]="currentPage() >= totalPages() - 1 && currentChapter() >= chapter()!.total_chapters - 1">
-              NEXT
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M5 12h14M12 5l7 7-7 7"/>
-              </svg>
-            </button>
-          </div>
+          <!-- PAGE NAV removed; navigation via arrow keys -->
         </div>
       } @else {
         <!-- SCROLL VIEW -->
         <article
           #virtualHostRef
           class="chapter-content chapter-content-virtual"
-          [style.max-width.px]="pageWidth()"
+          [style.max-width]="pageWidthPct() + '%'"
           [style.font-size.px]="fontSize()"
           [style.font-family]="fontFamily() + ', Georgia, serif'"
           [style.line-height]="lineHeight()">

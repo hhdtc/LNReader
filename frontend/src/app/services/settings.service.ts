@@ -9,7 +9,7 @@ const DEFAULTS: UserSettings = {
   bg_color: '#0b0b0b',
   font_size: 18,
   font_family: 'Space Grotesk',
-  page_width: 720,
+  page_width: 75,
   view_mode: 'scroll',
   google_user_email: '',
   google_user_name: '',

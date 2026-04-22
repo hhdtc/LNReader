@@ -1,6 +1,7 @@
 import {
   Component, OnInit, OnDestroy, signal,
-  HostListener, ElementRef, ViewChild, ViewChildren, QueryList, computed, AfterViewChecked
+  HostListener, ElementRef, ViewChild, ViewChildren, QueryList, computed, AfterViewChecked,
+  Injector, afterNextRender
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { CommonModule } from '@angular/common';
@@ -52,14 +53,18 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
   bgPresets = BG_PRESETS;
   fontSize = signal(18);
   fontFamily = signal('Space Grotesk');
-  pageWidth = signal(720);
+  pageWidthPct = signal(75);
   lineHeight = signal(1.9);
+  widthOptions = [60, 70, 80, 90];
+
+  private pendingScrollRestore = -1;
+  private pendingPageRestore = -1;
 
   // View mode: 'scroll' = long page, 'paginate' = paginated
   viewMode = signal<'scroll' | 'paginate'>('scroll');
   currentPage = signal(0);
   totalPages = signal(1);
-  pagesContent: string[] = [];
+  pagesContent = signal<string[]>([]);
   private needsPageRecalc = false;
   private goToLastPageAfterRecalc = false;
 
@@ -93,7 +98,8 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
     private api: ApiService,
     public settings: SettingsService,
     private sanitizer: DomSanitizer,
-    private chapterCache: ChapterCacheService
+    private chapterCache: ChapterCacheService,
+    private injector: Injector
   ) {}
 
   ngOnInit() {
@@ -102,7 +108,8 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.bgColor.set(s.bg_color || '#0b0b0b');
     this.fontSize.set(s.font_size || 18);
     this.fontFamily.set(s.font_family || 'Space Grotesk');
-    this.pageWidth.set(s.page_width || 720);
+    const pw = s.page_width || 720;
+    this.pageWidthPct.set(pw <= 100 ? pw : 75);
     if (s.view_mode === 'paginate') {
       this.viewMode.set('paginate');
       this.needsPageRecalc = true;
@@ -113,6 +120,8 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.api.getProgress(this.bookId).subscribe({
       next: (p) => {
         this.currentChapter.set(p.chapter_index || 0);
+        this.pendingScrollRestore = p.scroll_position || 0;
+        this.pendingPageRestore = p.page_index || 0;
         this.loadChapter(p.chapter_index || 0);
       },
       error: () => this.loadChapter(0)
@@ -171,9 +180,16 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
       this.initScrollVirtualization(c.content);
     } else {
       this.resetVirtualization();
+      afterNextRender(() => this.recalcPages(), { injector: this.injector });
     }
 
-    setTimeout(() => this.scrollToTop(), 50);
+    const scrollTarget = this.pendingScrollRestore;
+    this.pendingScrollRestore = -1;
+    if (scrollTarget > 0) {
+      setTimeout(() => window.scrollTo({ top: scrollTarget }), 50);
+    } else {
+      setTimeout(() => this.scrollToTop(), 50);
+    }
     this.scheduleSave();
   }
 
@@ -367,7 +383,7 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   private estimateBlockHeight(html: string): number {
     const plainText = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-    const contentWidth = Math.max(320, this.pageWidth() - 48);
+    const contentWidth = Math.max(320, window.innerWidth * this.pageWidthPct() / 100 - 48);
     const avgCharWidth = Math.max(6, this.fontSize() * 0.55);
     const charsPerLine = Math.max(12, Math.floor(contentWidth / avgCharWidth));
     const lines = Math.max(1, Math.ceil(plainText.length / charsPerLine));
@@ -477,9 +493,10 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
 
     // Hidden measurer with same styles as reading area
     const measurer = document.createElement('div');
+    const pxWidth = Math.round(window.innerWidth * this.pageWidthPct() / 100);
     measurer.style.cssText = `
       position:absolute; visibility:hidden; z-index:-1;
-      width:${this.pageWidth()}px; max-width:${this.pageWidth()}px;
+      width:${pxWidth}px; max-width:${pxWidth}px;
       font-size:${this.fontSize()}px;
       font-family:${this.fontFamily()}, Georgia, serif;
       line-height:${this.lineHeight()};
@@ -525,9 +542,13 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
 
     if (pages.length === 0) pages.push(content);
 
-    this.pagesContent = pages;
+    this.pagesContent.set(pages);
     this.totalPages.set(pages.length);
-    if (this.goToLastPageAfterRecalc) {
+    if (this.pendingPageRestore >= 0) {
+      const target = Math.min(this.pendingPageRestore, pages.length - 1);
+      this.pendingPageRestore = -1;
+      this.currentPage.set(target);
+    } else if (this.goToLastPageAfterRecalc) {
       this.goToLastPageAfterRecalc = false;
       this.currentPage.set(pages.length - 1);
     } else if (this.currentPage() >= pages.length) {
@@ -538,11 +559,13 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
   goToPage(page: number) {
     if (page < 0 || page >= this.totalPages()) return;
     this.currentPage.set(page);
+    this.scheduleSave();
   }
 
   nextPage() {
     if (this.currentPage() < this.totalPages() - 1) {
       this.currentPage.update(p => p + 1);
+      this.scheduleSave();
     } else {
       this.nextChapter();
     }
@@ -551,6 +574,7 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
   prevPage() {
     if (this.currentPage() > 0) {
       this.currentPage.update(p => p - 1);
+      this.scheduleSave();
     } else {
       this.goToLastPageAfterRecalc = true;
       this.prevChapter();
@@ -566,7 +590,7 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
     if (!this.bookId) return;
     this.api.updateProgress(this.bookId, {
       chapter_index: this.currentChapter(),
-      page_index: 0,
+      page_index: this.currentPage(),
       scroll_position: window.scrollY
     }).subscribe();
   }
@@ -650,9 +674,9 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
     }
   }
 
-  onPageWidthChange(w: number) {
-    this.pageWidth.set(w);
-    this.settings.update({ page_width: w });
+  onPageWidthPctChange(pct: number) {
+    this.pageWidthPct.set(pct);
+    this.settings.update({ page_width: pct });
     if (this.viewMode() === 'paginate') {
       this.needsPageRecalc = true;
     } else {

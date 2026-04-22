@@ -88,6 +88,21 @@ $panel-border-light: rgba(0, 0, 0, 0.12);
   flex-shrink: 0;
 }
 
+.page-indicator-header {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  opacity: 0.6;
+  flex-shrink: 0;
+
+  .page-num, .page-total { font-variant-numeric: tabular-nums; }
+  .chapter-sep { margin: 0 1px; opacity: 0.5; }
+
+  &.light { color: #1a1a1a; }
+}
+
 .chapter-info-btn {
   display: inline-flex;
   align-items: center;
