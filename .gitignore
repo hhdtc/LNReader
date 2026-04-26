@@ -45,3 +45,7 @@ Thumbs.db
 !.vscode/extensions.json
 !.vscode/mcp.json
 .idea/
+
+#model
+qwen-tts/models/*
+qwen-tts/outputs/*

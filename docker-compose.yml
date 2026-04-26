@@ -24,7 +24,7 @@ services:
     build: ./frontend
     container_name: jpreader-frontend
     ports:
-      - "4400:80"
+      - "4800:80"
     networks:
       - app-net
     depends_on:
@@ -32,21 +32,45 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # tts:
+  #   image: xxxxrt666/gpt-sovits:latest-cu128
+  #   container_name: jpreader-tts
+  #   runtime: nvidia
+  #   environment:
+  #     - NVIDIA_VISIBLE_DEVICES=all
+  #     - LD_LIBRARY_PATH=/root/conda/lib:/root/conda/lib/python3.12/site-packages/nvidia/cublas/lib:/root/conda/lib/python3.12/site-packages/nvidia/cudnn/lib
+  #   ports:
+  #     - "9874:9874"  # WebUI control panel
+  #     - "9880:9880"  # API server
+  #   volumes:
+  #     - ./tts_custom_models:/workspace/GPT-SoVITS/custom_models
+  #     - ./tts_pretrained_models:/workspace/GPT-SoVITS/GPT_SoVITS/pretrained_models
+  #   shm_size: "16g"
+  #   working_dir: /workspace/GPT-SoVITS
+  #   command: >
+  #     bash -c "
+  #       wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb -O /tmp/cuda-keyring.deb 2>/dev/null || true &&
+  #       dpkg -i /tmp/cuda-keyring.deb 2>/dev/null || true &&
+  #       apt-get update -qq &&
+  #       apt-get install -y libnpp-12-8 &&
+  #       python webui.py & python api_v2.py -a 0.0.0.0 -p 9880 && wait"
+  #   networks:
+  #     - app-net
+  #   restart: unless-stopped
+
   tts:
-    image: xxxxrt666/gpt-sovits:latest-cu128
+    build: ./qwen-tts
     container_name: jpreader-tts
     runtime: nvidia
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
+      - HF_HUB_OFFLINE=1
+      - TRANSFORMERS_OFFLINE=1
     ports:
-      - "9874:9874"  # WebUI control panel
-      - "9880:9880"  # API server
+      - "7860:7860"  # WebUI / API server
     volumes:
-      - tts_models:/workspace/GPT-SoVITS
-    shm_size: "16g"
-    working_dir: /workspace/GPT-SoVITS
-    command: >
-      bash -c "python webui.py & python api_v2.py -a 0.0.0.0 -p 9880 && wait"
+      - ./qwen-tts/models:/models
+      - ./qwen-tts/outputs:/app/outputs
     networks:
       - app-net
     restart: unless-stopped
@@ -54,7 +78,6 @@ services:
 volumes:
   books_data:
   db_data:
-  tts_models:
 
 networks:
   app-net:

@@ -81,4 +81,9 @@ export class ApiService {
   translate(req: TranslationRequest): Observable<TranslationResponse> {
     return this.http.post<TranslationResponse>(`${this.base}/api/translate`, req);
   }
+
+  // TTS
+  tts(text: string, refAudioBase64: string): Observable<{ audio_base64: string }> {
+    return this.http.post<{ audio_base64: string }>(`${this.base}/api/tts`, { text, ref_audio_base64: refAudioBase64 });
+  }
 }

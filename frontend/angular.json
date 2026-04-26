@@ -28,6 +28,11 @@
               {
                 "glob": "**/*",
                 "input": "public"
+              },
+              {
+                "glob": "tts_ref.wav",
+                "input": "ref",
+                "output": "ref"
               }
             ],
             "styles": [

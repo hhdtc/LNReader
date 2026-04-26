@@ -92,6 +92,16 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   private saveTimer: any;
 
+  // TTS
+  ttsMode = signal(false);
+  ttsSentences = signal<string[]>([]);
+  ttsCurrentIdx = signal(-1);
+  ttsPlaying = signal(false);
+  private ttsAudioCache = new Map<number, string>(); // idx -> base64
+  private ttsFetchingSet = new Set<number>();
+  private ttsAudioElement: HTMLAudioElement | null = null;
+  private ttsRefAudioB64 = '';
+
   constructor(
     private route: ActivatedRoute,
     private router: Router,
@@ -132,6 +142,7 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.saveProgress();
     this.chapterCache.clear();
+    this.stopTTS();
   }
 
   ngAfterViewChecked() {
@@ -170,6 +181,7 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
   }
 
   private applyChapter(c: ChapterContent, index: number): void {
+    if (this.ttsMode()) this.stopTTS();
     this.chapter.set(c);
     this.currentChapter.set(index);
     this.rememberChapterSummary(index, c.chapter_title);
@@ -716,6 +728,184 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.selectedText.set('');
     this.translatedText.set('');
     this.translateError.set('');
+  }
+
+  // ─── TTS ─────────────────────────────────────────────────────────────────
+
+  toggleTTS(): void {
+    if (this.ttsMode()) {
+      this.stopTTS();
+    } else {
+      this.startTTS();
+    }
+  }
+
+  private startTTS(): void {
+    const content = this.chapter()?.content;
+    if (!content) return;
+    const sentences = this.extractSentences(content);
+    if (sentences.length === 0) return;
+    this.ttsAudioCache.clear();
+    this.ttsFetchingSet.clear();
+    this.ttsSentences.set(sentences);
+    this.ttsMode.set(true);
+    this.ttsCurrentIdx.set(0);
+    this.ttsPlaying.set(true);
+
+    const doStart = () => {
+      this.bufferAhead(0);
+      this.fetchAndPlay(0);
+    };
+
+    if (this.ttsRefAudioB64) {
+      doStart();
+    } else {
+      fetch('/ref/tts_ref.wav')
+        .then(r => r.arrayBuffer())
+        .then(buf => {
+          const bytes = new Uint8Array(buf);
+          let binary = '';
+          for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+          this.ttsRefAudioB64 = btoa(binary);
+          doStart();
+        })
+        .catch(() => {
+          this.stopTTS();
+          console.error('Failed to load TTS reference audio from /ref/tts_ref.wav');
+        });
+    }
+  }
+
+  stopTTS(): void {
+    if (this.ttsAudioElement) {
+      this.ttsAudioElement.onended = null;
+      this.ttsAudioElement.pause();
+      this.ttsAudioElement = null;
+    }
+    this.ttsAudioCache.clear();
+    this.ttsFetchingSet.clear();
+    this.ttsMode.set(false);
+    this.ttsCurrentIdx.set(-1);
+    this.ttsPlaying.set(false);
+  }
+
+  onTtsSentenceClick(idx: number): void {
+    if (this.ttsAudioElement) {
+      this.ttsAudioElement.onended = null;
+      this.ttsAudioElement.pause();
+      this.ttsAudioElement = null;
+    }
+    this.ttsCurrentIdx.set(idx);
+    this.ttsPlaying.set(true);
+    this.bufferAhead(idx);
+    this.fetchAndPlay(idx);
+  }
+
+  private fetchAndPlay(idx: number): void {
+    if (this.ttsAudioCache.has(idx)) {
+      this.playFromCache(idx);
+      return;
+    }
+    if (!this.ttsFetchingSet.has(idx)) {
+      this.fetchSentenceAudio(idx);
+    }
+    // playFromCache will be called when fetch completes
+  }
+
+  private bufferAhead(fromIdx: number): void {
+    const sentences = this.ttsSentences();
+    for (let i = fromIdx + 1; i <= fromIdx + 3 && i < sentences.length; i++) {
+      if (!this.ttsAudioCache.has(i) && !this.ttsFetchingSet.has(i)) {
+        this.fetchSentenceAudio(i);
+      }
+    }
+  }
+
+  private fetchSentenceAudio(idx: number): void {
+    const sentences = this.ttsSentences();
+    if (idx < 0 || idx >= sentences.length) return;
+    this.ttsFetchingSet.add(idx);
+    this.api.tts(this.cleanTextForTTS(sentences[idx]), this.ttsRefAudioB64).subscribe({
+      next: (r) => {
+        this.ttsFetchingSet.delete(idx);
+        this.ttsAudioCache.set(idx, r.audio_base64);
+        // If this is the sentence we're waiting to play, play it now
+        if (idx === this.ttsCurrentIdx() && this.ttsPlaying() && !this.ttsAudioElement) {
+          this.playFromCache(idx);
+        }
+      },
+      error: () => {
+        this.ttsFetchingSet.delete(idx);
+        // Skip errored sentence and advance
+        if (idx === this.ttsCurrentIdx() && this.ttsPlaying()) {
+          this.advanceToNext(idx);
+        }
+      }
+    });
+  }
+
+  private playFromCache(idx: number): void {
+    const b64 = this.ttsAudioCache.get(idx);
+    if (!b64) return;
+    if (this.ttsAudioElement) {
+      this.ttsAudioElement.onended = null;
+      this.ttsAudioElement.pause();
+    }
+    const audio = new Audio(`data:audio/wav;base64,${b64}`);
+    this.ttsAudioElement = audio;
+    audio.onended = () => {
+      this.ttsAudioCache.delete(idx);
+      this.ttsAudioElement = null;
+      this.advanceToNext(idx);
+    };
+    audio.play().catch(() => {
+      this.ttsAudioElement = null;
+      this.advanceToNext(idx);
+    });
+    this.scrollToTtsSentence(idx);
+  }
+
+  private advanceToNext(idx: number): void {
+    if (!this.ttsMode()) return;
+    const next = idx + 1;
+    if (next < this.ttsSentences().length) {
+      this.ttsCurrentIdx.set(next);
+      this.bufferAhead(next);
+      this.fetchAndPlay(next);
+    } else {
+      this.ttsPlaying.set(false);
+    }
+  }
+
+  private scrollToTtsSentence(idx: number): void {
+    setTimeout(() => {
+      const el = document.querySelector(`[data-tts-idx="${idx}"]`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 0);
+  }
+
+  private cleanTextForTTS(text: string): string {
+    return text
+      // Remove Japanese/Chinese bracket-style quotation marks and brackets
+      .replace(/[「」『』【】《》〈〉〔〕〖〗〘〙〚〛]/g, '')
+      // Remove other decorative punctuation that confuses TTS
+      .replace(/[・＊※◆◇■□▲△▼▽○●◎★☆]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private extractSentences(html: string): string[] {
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+    const text = (temp.textContent || '').trim();
+    if (!text) return [];
+
+    // Split after Japanese terminators or English terminators followed by whitespace
+    const parts = text.split(/(?<=[。！？])|(?<=[.!?])\s+/)
+      .map(s => s.trim())
+      .filter(s => s.length > 1);
+
+    return parts;
   }
 
   get progress(): number {
