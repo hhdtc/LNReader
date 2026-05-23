@@ -456,3 +456,79 @@
     font-size: 1.5rem;
   }
 }
+
+// --- Audio controls per book card ---
+
+.book-audio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 8px;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.btn-audio-gen,
+.btn-audio-listen {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-200);
+  font-size: 0.65rem;
+  font-family: inherit;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+
+  &:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+}
+
+.btn-audio-listen {
+  border-color: rgba(0, 209, 255, 0.4);
+  color: var(--accent);
+}
+
+.btn-audio-del {
+  display: flex;
+  align-items: center;
+  padding: 4px 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-300);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+
+  &:hover {
+    color: #f87171;
+    border-color: rgba(248, 113, 113, 0.3);
+  }
+}
+
+.audio-status-text {
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  color: var(--text-300);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.audio-running { color: var(--accent); }
+.audio-failed  { color: #f87171; }
+
+.audio-spinner {
+  width: 8px;
+  height: 8px;
+  border: 1px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }

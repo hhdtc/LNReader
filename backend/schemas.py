@@ -79,6 +79,11 @@ class SettingsUpdate(BaseModel):
     font_family: Optional[str] = None
     page_width: Optional[int] = None
     view_mode: Optional[str] = None
+    voicebox_url: Optional[str] = None
+    voicebox_port: Optional[int] = None
+    voicebox_profile_id: Optional[str] = None
+    voicebox_language: Optional[str] = None
+    voicebox_model_size: Optional[str] = None
 
 
 class SettingsResponse(BaseModel):
@@ -93,6 +98,11 @@ class SettingsResponse(BaseModel):
     google_user_email: str
     google_user_name: str
     google_user_picture: str
+    voicebox_url: str
+    voicebox_port: int
+    voicebox_profile_id: str
+    voicebox_language: str
+    voicebox_model_size: str
 
     class Config:
         from_attributes = True
@@ -103,3 +113,55 @@ class UserInfo(BaseModel):
     name: str
     picture: str
     is_authenticated: bool = True
+
+
+# --- Audio / Voicebox schemas ---
+
+class AudioJobStatus(BaseModel):
+    book_id: int
+    status: str  # idle/running/done/failed
+    chapters_done: int
+    total_chapters: int
+    error: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ChapterAudioInfo(BaseModel):
+    chapter_index: int
+    status: str  # pending/done/failed
+    duration: float
+    has_audio: bool
+
+    class Config:
+        from_attributes = True
+
+
+class AudioStatusResponse(BaseModel):
+    job: AudioJobStatus
+    chapters: List[ChapterAudioInfo]
+
+
+class VoiceboxProfile(BaseModel):
+    id: str
+    name: str
+    language: str = "en"
+    description: Optional[str] = None
+
+
+# --- Listening progress schemas ---
+
+class ListeningProgressUpdate(BaseModel):
+    chapter_index: int
+    position_seconds: float
+
+
+class ListeningProgressResponse(BaseModel):
+    book_id: int
+    chapter_index: int
+    position_seconds: float
+    last_listened_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True

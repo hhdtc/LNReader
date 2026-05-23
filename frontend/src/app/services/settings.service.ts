@@ -14,6 +14,11 @@ const DEFAULTS: UserSettings = {
   google_user_email: '',
   google_user_name: '',
   google_user_picture: '',
+  voicebox_url: 'http://host.docker.internal',
+  voicebox_port: 17493,
+  voicebox_profile_id: '',
+  voicebox_language: 'en',
+  voicebox_model_size: '1.7B',
 };
 
 @Injectable({ providedIn: 'root' })

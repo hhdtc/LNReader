@@ -14,18 +14,20 @@
    - [Pydantic Schemas](#42-pydantic-schemas)
    - [API Endpoints](#43-api-endpoints)
    - [Services](#44-services)
-5. [TTS Service](#5-tts-service)
-6. [Key Data Flows](#6-key-data-flows)
-   - [Book Upload](#61-book-upload)
-   - [Chapter Loading](#62-chapter-loading)
-   - [Scroll-mode Virtualization](#63-scroll-mode-virtualization)
-   - [Pagination](#64-pagination)
-   - [Translation](#65-translation)
-   - [Japanese Annotation (Furigana)](#66-japanese-annotation-furigana)
-   - [TTS Playback](#67-tts-playback)
-   - [Progress Tracking](#68-progress-tracking)
-   - [Authentication](#69-authentication)
-7. [Configuration & Infrastructure](#7-configuration--infrastructure)
+5. [TTS Service (Qwen)](#5-tts-service)
+6. [Voicebox Chapter-Audio Pipeline](#6-voicebox-chapter-audio-pipeline)
+7. [Key Data Flows](#7-key-data-flows)
+   - [Book Upload](#71-book-upload)
+   - [Chapter Loading](#72-chapter-loading)
+   - [Scroll-mode Virtualization](#73-scroll-mode-virtualization)
+   - [Pagination](#74-pagination)
+   - [Translation](#75-translation)
+   - [Japanese Annotation (Furigana)](#76-japanese-annotation-furigana)
+   - [Progress Tracking](#77-progress-tracking)
+   - [Authentication](#78-authentication)
+   - [Voicebox Audio Generation](#79-voicebox-audio-generation)
+   - [Listening Progress](#710-listening-progress)
+8. [Configuration & Infrastructure](#8-configuration--infrastructure)
 
 ---
 
@@ -37,7 +39,8 @@ JPReader is a self-hosted e-book reader focused on Japanese content. Core featur
 - Virtual-scroll and paginated reading modes
 - Japanese furigana annotation via MeCab morphological analysis
 - Multi-provider text translation (DeepL, Google, OpenAI)
-- Voice-cloning TTS via Qwen3-TTS with sentence-level playback
+- Chapter-by-chapter audio generation via Voicebox (locally-running TTS server)
+- Dedicated listening page with resume support and chapter-read sync
 - Persistent reading progress
 - Google OAuth + local authentication
 
@@ -68,10 +71,14 @@ JPReader/
 │   │   ├── translate.py     # Translation proxy endpoint
 │   │   ├── settings.py      # User settings endpoints
 │   │   └── tts.py           # TTS proxy endpoint
+│   │   ├── voicebox.py      # Voicebox chapter-audio endpoints
+│   │   └── listening.py     # Listening progress endpoints
 │   ├── services/
 │   │   ├── book_parser.py   # EPUB/TXT parsing logic
-│   │   └── japanese.py      # Language detection + annotation
+│   │   ├── japanese.py      # Language detection + annotation
+│   │   └── voicebox_service.py  # Voicebox API + text split + WAV concat
 │   ├── books/               # Uploaded book files (runtime)
+│   ├── audio/               # Generated chapter WAV files (runtime)
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/
@@ -82,7 +89,8 @@ JPReader/
 │   │   │   │   └── auth-callback.component.ts
 │   │   │   ├── library/library.component.ts
 │   │   │   ├── reader/reader.component.ts
-│   │   │   └── settings/settings.component.ts
+│   │   │   ├── settings/settings.component.ts
+│   │   │   └── listen/listen.component.ts  # Audio player page
 │   │   ├── services/
 │   │   │   ├── api.service.ts
 │   │   │   ├── auth.service.ts
@@ -309,6 +317,7 @@ Wraps user settings in an Angular signal.
 /library      →  LibraryComponent        (guarded)
 /reader/:id   →  ReaderComponent         (guarded)
 /settings     →  SettingsComponent       (guarded)
+/listen/:id   →  ListenComponent         (guarded)
 ```
 
 All page components are lazy-loaded. Proxy config forwards `/api/*` and `/auth/*` to `localhost:8000` in development.
@@ -507,9 +516,140 @@ Reference audio source: the frontend loads `/ref/tts_ref.wav` (served as a stati
 
 ---
 
-## 6. Key Data Flows
+## 6. Voicebox Chapter-Audio Pipeline
 
-### 6.1 Book Upload
+Voicebox is a separate, locally-running TTS server. JPReader's backend proxies all Voicebox calls — the frontend never contacts Voicebox directly.
+
+### 6.1 Database Tables
+
+#### `BookAudioJob`
+One row per book; tracks overall generation state.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | PK | |
+| `book_id` | Integer | not a FK to avoid cascade issues |
+| `status` | String | `idle` / `running` / `done` / `failed` |
+| `chapters_done` | Integer | incremented after each chapter |
+| `total_chapters` | Integer | |
+| `error` | Text | nullable; last error message |
+| `started_at` | DateTime | |
+| `completed_at` | DateTime | |
+
+#### `ChapterAudio`
+One row per generated chapter.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | PK | |
+| `book_id` | Integer | |
+| `chapter_index` | Integer | unique together with book_id |
+| `audio_path` | String | absolute path to WAV on disk |
+| `duration` | Float | seconds |
+| `status` | String | `pending` / `done` / `failed` |
+| `created_at` | DateTime | |
+
+#### `ListeningProgress`
+One row per book; tracks where the user stopped listening.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | PK | |
+| `book_id` | Integer | unique |
+| `chapter_index` | Integer | |
+| `position_seconds` | Float | |
+| `last_listened_at` | DateTime | |
+
+### 6.2 Voicebox API (consumed by backend)
+
+| Method | Path | Use |
+|--------|------|-----|
+| POST | `/models/load` | Load TTS model into GPU |
+| GET | `/profiles` | List voice profiles |
+| POST | `/generate` | Generate speech → `{id, duration}` |
+| GET | `/audio/{id}` | Download WAV bytes |
+| DELETE | `/history/{id}` | Clean up after download |
+
+**`/generate` body:** `profile_id`, `text` (≤5000 chars), `language`, `model_size`
+
+### 6.3 Backend Service — `voicebox_service.py`
+
+| Function | Description |
+|----------|-------------|
+| `get_voicebox_base(url, port)` | Builds base URL string |
+| `extract_plain_text(html)` | BeautifulSoup strip → plain text for synthesis |
+| `_split_text(text)` | Splits text at paragraph/sentence boundaries into ≤4800 char segments |
+| `_concat_wav_bytes(chunks)` | Concatenates WAV byte blobs using Python `wave` module |
+| `load_model(base_url)` | POST `/models/load` |
+| `list_profiles(base_url)` | GET `/profiles` |
+| `generate_chapter_audio(...)` | Split → generate each segment → download → delete history → concatenate → save WAV |
+
+### 6.4 Backend Router — `routers/voicebox.py`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/voicebox/load-model` | Proxy to Voicebox `/models/load` |
+| GET | `/api/voicebox/profiles` | Proxy to Voicebox `/profiles` |
+| POST | `/api/voicebox/generate/{book_id}` | Start background audio generation |
+| GET | `/api/voicebox/status/{book_id}` | Return `AudioStatusResponse` (job + chapter list) |
+| GET | `/api/voicebox/audio/{book_id}/{chapter_index}` | Stream WAV file via `FileResponse` |
+| DELETE | `/api/voicebox/audio/{book_id}` | Delete all audio + reset job |
+
+**Background task `_run_generation`**: runs in FastAPI `BackgroundTasks`; iterates chapters, calls `generate_chapter_audio`, updates DB, handles failures per-chapter.
+
+### 6.5 Backend Router — `routers/listening.py`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/listening-progress/{book_id}` | Returns saved position (defaults 0,0) |
+| PUT | `/api/listening-progress/{book_id}` | Upserts `ListeningProgress` |
+
+### 6.6 Frontend — Settings (Voicebox section)
+
+New fields saved to `UserSettings`:
+- `voicebox_url` (default `http://localhost`)
+- `voicebox_port` (default `8000`)
+- `voicebox_profile_id` — selected from fetched Voicebox profiles
+- `voicebox_language` (`en` / `zh`)
+- `voicebox_model_size` (default `1.7B`)
+
+`loadProfiles()` — fetches `GET /api/voicebox/profiles`, populates dropdown.  
+`loadModel()` — calls `POST /api/voicebox/load-model`, shows inline status.
+
+### 6.7 Frontend — Library (audio controls per card)
+
+New signals:
+- `audioJobs: Signal<Map<number, AudioJobStatus>>` — status per book
+- `generatingIds: Signal<Set<number>>` — books with in-flight start request
+
+On `loadBooks()`: fires `getAudioStatus` for every book in parallel via `forkJoin`.
+
+Polling: `setInterval(3s)` while any job is `running`; clears when all done/failed.
+
+Per-card states: `idle` → GENERATE AUDIO button | `running` → progress text + spinner | `done` → LISTEN + delete buttons | `failed` → FAILED + RETRY.
+
+### 6.8 Frontend — ListenComponent (`/listen/:id`)
+
+| Method | Description |
+|--------|-------------|
+| `ngOnInit()` | Loads book, chapter index, audio status, listening progress in parallel; resumes at saved position |
+| `loadAudio(idx, resume)` | Sets `<audio>` src to `/api/voicebox/audio/:id/:idx`, seeks to saved position if resume |
+| `togglePlay()` | Play/pause, saves progress on pause |
+| `onTimeUpdate()` | Debounced 2s progress save |
+| `onEnded()` | Marks chapter as read via `updateProgress()`, auto-advances to next chapter with audio |
+| `prevChapter()` / `nextChapter()` | Navigate; preserves playing state |
+| `jumpToChapter(idx)` | Click from sidebar; only for chapters with audio |
+| `setSpeed(rate)` | Updates `audio.playbackRate` |
+| `saveProgress()` | PUT `/api/listening-progress/:id` |
+| `formatTime(secs)` | `"m:ss"` format for display |
+
+**Layout:** sticky header (back + book title) | left sidebar (chapter list with audio indicator) | player area (cover, title, progress bar, controls, speed).
+
+---
+
+## 7. Key Data Flows
+
+### 7.1 Book Upload
 
 ```
 User selects file
@@ -526,7 +666,7 @@ User selects file
   → frontend prepends book to grid
 ```
 
-### 6.2 Chapter Loading
+### 7.2 Chapter Loading
 
 ```
 User opens book (/reader/:id)
@@ -550,7 +690,7 @@ User opens book (/reader/:id)
   → async prefetch adjacent chapters into cache
 ```
 
-### 6.3 Scroll-mode Virtualization
+### 7.3 Scroll-mode Virtualization
 
 ```
 Chapter HTML
@@ -576,7 +716,7 @@ On scroll / init → updateVirtualWindow()
 After render → measure actual heights → update estimates
 ```
 
-### 6.4 Pagination
+### 7.4 Pagination
 
 ```
 recalcPages()
@@ -601,7 +741,7 @@ User presses ← / prev button:
   else if more chapters before: prevChapter() → jump to last page
 ```
 
-### 6.5 Translation
+### 7.5 Translation
 
 ```
 User selects text in reader
@@ -639,7 +779,7 @@ User clicks TRANSLATE
   → frontend displays in translation panel
 ```
 
-### 6.6 Japanese Annotation (Furigana)
+### 7.6 Japanese Annotation (Furigana)
 
 ```
 User clicks 日 toggle (annotate = true)
@@ -667,41 +807,7 @@ frontend CSS:
   .katakana { color: #61afef }
 ```
 
-### 6.7 TTS Playback
-
-```
-User clicks TTS button
-  → ReaderComponent.startTTS()
-  → extract sentences from chapter text
-      split on [。！？.!?] boundaries
-  → fetch /ref/tts_ref.wav → base64 encode → refAudioB64
-
-  → bufferAhead(0)   → schedule synthesis for sentences 0,1,2
-  → fetchAndPlay(0)
-
-fetchAndPlay(idx):
-  → if audio cached: skip synthesis
-  → else:
-       ApiService.tts(sentences[idx], refAudioB64)
-         POST /api/tts {text, ref_audio_base64}
-         backend → POST jpreader-tts:7860/qwenapi/v1/voice-clone
-         → {audio_files_base64: [base64]}
-         → return {audio_base64}
-  → cache audio at idx
-  → create Audio element from data:audio/wav;base64,...
-  → audio.play()
-  → audio.onended:
-       scrollToSentence(idx + 1)
-       bufferAhead(idx + 1)      ← pre-fetch next 3
-       fetchAndPlay(idx + 1)
-
-stopTTS():
-  → pause current audio
-  → clear audio cache
-  → reset ttsIndex signal
-```
-
-### 6.8 Progress Tracking
+### 7.7 Progress Tracking
 
 ```
 Triggers: scroll event, page change, chapter change
@@ -726,7 +832,7 @@ On next open:
       paginate mode: navigate to page_index
 ```
 
-### 6.9 Authentication
+### 7.8 Authentication
 
 **Local (dev):**
 ```
@@ -761,7 +867,64 @@ AuthCallbackComponent.ngOnInit():
 
 ---
 
-## 7. Configuration & Infrastructure
+### 7.9 Voicebox Audio Generation
+
+```
+User clicks GENERATE AUDIO on a book card
+  → LibraryComponent.generateAudio(book)
+  → ApiService.startAudioGeneration(bookId)   POST /api/voicebox/generate/:id
+  → backend: guard (no profile set? → 400), guard (already running? → 409)
+  → create/reset BookAudioJob (status=running)
+  → BackgroundTasks.add_task(_run_generation, book_id, SessionLocal)
+  → return AudioJobStatus {status: 'running', chapters_done: 0}
+
+_run_generation (background thread):
+  for each chapter 0..N-1:
+    → book_parser.parse_epub/txt → chapters[idx]
+    → voicebox_service.extract_plain_text(html)
+    → voicebox_service.generate_chapter_audio():
+        split text into ≤4800 char segments
+        for each segment:
+          POST voicebox/generate → {id, duration}
+          GET  voicebox/audio/{id} → WAV bytes
+          DELETE voicebox/history/{id}
+        concatenate WAV files using Python wave module
+        save to ./audio/{book_id}/chapter_{idx}.wav
+    → update ChapterAudio (status=done, path, duration)
+    → increment BookAudioJob.chapters_done
+
+Frontend polls GET /api/voicebox/status/:id every 3s
+  → updates book card UI (progress counter)
+  → stops polling when status = done/failed
+```
+
+### 7.10 Listening Progress
+
+```
+User opens /listen/:id
+  → parallel:
+      getBook(id)
+      getChapterIndex(id)
+      getAudioStatus(id)   → list of ChapterAudioInfo
+      getListeningProgress(id) → {chapter_index, position_seconds}
+  → loadAudio(savedChapterIndex, resume=true)
+      → audio.src = /api/voicebox/audio/:id/:chapterIdx
+      → on loadedmetadata: audio.currentTime = position_seconds
+
+User plays / seeks / skips chapters
+  → onTimeUpdate → debounced 2s → PUT /api/listening-progress/:id
+  → onEnded:
+      → PUT /api/progress/:id  (mark chapter read)
+      → if next chapter has audio: auto-advance + play
+      → else: stay on completed chapter
+
+User leaves page (ngOnDestroy)
+  → saveProgress() called immediately
+```
+
+---
+
+## 8. Configuration & Infrastructure
 
 ### Environment Variables (`.env`)
 
@@ -773,6 +936,7 @@ AuthCallbackComponent.ngOnInit():
 | `FRONTEND_URL` | `http://localhost:4200` | CORS origin + OAuth redirect base |
 | `BACKEND_URL` | `http://localhost:8000` | OAuth callback URI base |
 | `BOOKS_DIR` | `./books` | Directory for uploaded book files |
+| `AUDIO_DIR` | `./audio` | Directory for generated chapter WAV files |
 | `DATABASE_URL` | `sqlite:///./jpreader.db` | SQLAlchemy connection string |
 
 ### Docker Compose Services

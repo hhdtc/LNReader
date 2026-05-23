@@ -26,5 +26,10 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/settings/settings.component').then(m => m.SettingsComponent),
     canActivate: [authGuard],
   },
+  {
+    path: 'listen/:id',
+    loadComponent: () => import('./pages/listen/listen.component').then(m => m.ListenComponent),
+    canActivate: [authGuard],
+  },
   { path: '**', redirectTo: '/library' },
 ];

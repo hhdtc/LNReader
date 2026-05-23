@@ -384,6 +384,77 @@
   margin: 0;
 }
 
+.field-error {
+  font-size: 0.75rem;
+  color: #f87171;
+  margin: 4px 0 0;
+}
+
+.field-row {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.field-col-lg {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.field-col-sm {
+  width: 120px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.profile-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.flex-1 { flex: 1; }
+
+.btn-secondary {
+  padding: 8px 14px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-200);
+  font-size: 0.7rem;
+  font-family: inherit;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s, color 0.15s;
+
+  &:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+.status-ok {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  color: #4ade80;
+}
+
+.status-err {
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  color: #f87171;
+}
+
 @media (max-width: 768px) {
   .settings-main {
     padding: 24px 20px;

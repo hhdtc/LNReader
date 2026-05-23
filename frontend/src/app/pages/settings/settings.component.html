@@ -122,6 +122,99 @@
       </div>
     </section>
 
+    <!-- VOICEBOX ENGINE -->
+    <section class="settings-card" data-reveal>
+      <div class="card-label">
+        <div class="label-dot"></div>
+        <span>VOICEBOX ENGINE</span>
+      </div>
+      <div class="card-body">
+
+        <!-- URL + Port -->
+        <div class="field-group field-row">
+          <div class="field-col-lg">
+            <label class="field-label">VOICEBOX URL</label>
+            <input class="field-input" type="text" [value]="vbUrl()" (input)="vbUrl.set($any($event.target).value)" placeholder="http://localhost">
+          </div>
+          <div class="field-col-sm">
+            <label class="field-label">PORT</label>
+            <input class="field-input" type="number" [value]="vbPort()" (input)="vbPort.set(+$any($event.target).value)" placeholder="8000">
+          </div>
+        </div>
+
+        <!-- Voice Profile -->
+        <div class="field-group">
+          <label class="field-label">VOICE PROFILE</label>
+          <div class="profile-row">
+            <select class="field-select flex-1" [value]="vbProfileId()" (change)="vbProfileId.set($any($event.target).value)">
+              <option value="">-- select profile --</option>
+              @for (p of vbProfiles(); track p.id) {
+                <option [value]="p.id">{{ p.name }} ({{ p.language }})</option>
+              }
+            </select>
+            <button class="btn-secondary" (click)="loadProfiles()" [disabled]="vbProfilesLoading()">
+              {{ vbProfilesLoading() ? 'LOADING...' : 'FETCH PROFILES' }}
+            </button>
+          </div>
+          @if (vbProfilesError()) {
+            <p class="field-error">{{ vbProfilesError() }}</p>
+          }
+          @if (vbProfileId() && !vbProfiles().length) {
+            <p class="field-hint">Profile ID: {{ vbProfileId() }} (click FETCH PROFILES to see names)</p>
+          }
+        </div>
+
+        <!-- Language + Model size -->
+        <div class="field-group field-row">
+          <div class="field-col-lg">
+            <label class="field-label">SPEECH LANGUAGE</label>
+            <select class="field-select" [value]="vbLanguage()" (change)="vbLanguage.set($any($event.target).value)">
+              @for (l of vbLanguages; track l.value) {
+                <option [value]="l.value">{{ l.label }}</option>
+              }
+            </select>
+          </div>
+          <div class="field-col-sm">
+            <label class="field-label">MODEL SIZE</label>
+            <select class="field-select" [value]="vbModelSize()" (change)="vbModelSize.set($any($event.target).value)">
+              @for (m of vbModelSizes; track m.value) {
+                <option [value]="m.value">{{ m.value }}</option>
+              }
+            </select>
+          </div>
+        </div>
+
+        <!-- Load Model button -->
+        <div class="field-group">
+          <label class="field-label">MODEL CONTROL</label>
+          <div class="profile-row">
+            <button class="btn-secondary" (click)="loadModel()" [disabled]="vbLoadingModel()">
+              {{ vbLoadingModel() ? 'LOADING...' : 'LOAD MODEL' }}
+            </button>
+            @if (vbModelStatus() === 'ok') {
+              <span class="status-ok">MODEL LOADED</span>
+            } @else if (vbModelStatus() === 'error') {
+              <span class="status-err">FAILED — check Voicebox connection</span>
+            }
+          </div>
+        </div>
+
+        <!-- Save button -->
+        <div class="save-row">
+          <button class="btn-save" (click)="save()" [class.saved]="saved()">
+            @if (saved()) {
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              SAVED
+            } @else {
+              SAVE SETTINGS
+            }
+          </button>
+        </div>
+      </div>
+    </section>
+
     <!-- SECURITY NOTE -->
     <section class="settings-card info-card" data-reveal>
       <div class="card-label">

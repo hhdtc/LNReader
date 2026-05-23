@@ -1,10 +1,11 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 import {
   Book, ChapterContent, ReadingProgress,
-  UserSettings, TranslationRequest, TranslationResponse, UserInfo, ChapterSummary
+  UserSettings, TranslationRequest, TranslationResponse, UserInfo, ChapterSummary,
+  VoiceboxProfile, AudioJobStatus, AudioStatusResponse, ListeningProgress
 } from '../models/book.model';
 
 @Injectable({ providedIn: 'root' })
@@ -82,8 +83,59 @@ export class ApiService {
     return this.http.post<TranslationResponse>(`${this.base}/api/translate`, req);
   }
 
-  // TTS
+  // TTS (old sentence-by-sentence, kept for compatibility)
   tts(text: string, refAudioBase64: string): Observable<{ audio_base64: string }> {
     return this.http.post<{ audio_base64: string }>(`${this.base}/api/tts`, { text, ref_audio_base64: refAudioBase64 });
+  }
+
+  // Voicebox
+  // Direct Voicebox calls (browser → Voicebox, avoids Docker loopback issue)
+  getVoiceboxProfilesDirect(url: string, port: number): Observable<VoiceboxProfile[]> {
+    const base = `${url.replace(/\/+$/, '')}:${port}`;
+    return this.http.get<VoiceboxProfile[]>(`${base}/profiles`);
+  }
+
+  loadVoiceboxModelDirect(url: string, port: number): Observable<any> {
+    const base = `${url.replace(/\/+$/, '')}:${port}`;
+    return this.http.post(`${base}/models/load`, {});
+  }
+
+  loadVoiceboxModel(url?: string, port?: number): Observable<{ status: string; detail: any }> {
+    const params: any = {};
+    if (url) params['url'] = url;
+    if (port != null) params['port'] = port;
+    return this.http.post<{ status: string; detail: any }>(`${this.base}/api/voicebox/load-model`, {}, { params });
+  }
+
+  getVoiceboxProfiles(url?: string, port?: number): Observable<VoiceboxProfile[]> {
+    const params: any = {};
+    if (url) params['url'] = url;
+    if (port != null) params['port'] = port;
+    return this.http.get<VoiceboxProfile[]>(`${this.base}/api/voicebox/profiles`, { params });
+  }
+
+  startAudioGeneration(bookId: number): Observable<AudioJobStatus> {
+    return this.http.post<AudioJobStatus>(`${this.base}/api/voicebox/generate/${bookId}`, {});
+  }
+
+  getAudioStatus(bookId: number): Observable<AudioStatusResponse> {
+    return this.http.get<AudioStatusResponse>(`${this.base}/api/voicebox/status/${bookId}`);
+  }
+
+  getChapterAudioUrl(bookId: number, chapterIndex: number): string {
+    return `${this.base}/api/voicebox/audio/${bookId}/${chapterIndex}`;
+  }
+
+  deleteBookAudio(bookId: number): Observable<any> {
+    return this.http.delete(`${this.base}/api/voicebox/audio/${bookId}`);
+  }
+
+  // Listening progress
+  getListeningProgress(bookId: number): Observable<ListeningProgress> {
+    return this.http.get<ListeningProgress>(`${this.base}/api/listening-progress/${bookId}`);
+  }
+
+  updateListeningProgress(bookId: number, data: { chapter_index: number; position_seconds: number }): Observable<ListeningProgress> {
+    return this.http.put<ListeningProgress>(`${this.base}/api/listening-progress/${bookId}`, data);
   }
 }

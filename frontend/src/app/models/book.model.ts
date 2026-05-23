@@ -42,6 +42,11 @@ export interface UserSettings {
   google_user_email: string;
   google_user_name: string;
   google_user_picture: string;
+  voicebox_url: string;
+  voicebox_port: number;
+  voicebox_profile_id: string;
+  voicebox_language: string;
+  voicebox_model_size: string;
 }
 
 export interface UserInfo {
@@ -62,4 +67,38 @@ export interface TranslationRequest {
 export interface TranslationResponse {
   translated_text: string;
   provider: string;
+}
+
+export interface VoiceboxProfile {
+  id: string;
+  name: string;
+  language: string;
+  description?: string;
+}
+
+export interface AudioJobStatus {
+  book_id: number;
+  status: string; // idle/running/done/failed
+  chapters_done: number;
+  total_chapters: number;
+  error?: string;
+}
+
+export interface ChapterAudioInfo {
+  chapter_index: number;
+  status: string;
+  duration: number;
+  has_audio: boolean;
+}
+
+export interface AudioStatusResponse {
+  job: AudioJobStatus;
+  chapters: ChapterAudioInfo[];
+}
+
+export interface ListeningProgress {
+  book_id: number;
+  chapter_index: number;
+  position_seconds: number;
+  last_listened_at: string | null;
 }

@@ -7,6 +7,8 @@ services:
       - FRONTEND_URL=http://localhost
       - BOOKS_DIR=/app/books
       - DATABASE_URL=sqlite:////app/data/jpreader.db
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - books_data:/app/books
       - db_data:/app/data
@@ -24,7 +26,7 @@ services:
     build: ./frontend
     container_name: jpreader-frontend
     ports:
-      - "4800:80"
+      - "8080:80"
     networks:
       - app-net
     depends_on:
@@ -58,22 +60,22 @@ services:
   #     - app-net
   #   restart: unless-stopped
 
-  tts:
-    build: ./qwen-tts
-    container_name: jpreader-tts
-    runtime: nvidia
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - HF_HUB_OFFLINE=1
-      - TRANSFORMERS_OFFLINE=1
-    ports:
-      - "7860:7860"  # WebUI / API server
-    volumes:
-      - ./qwen-tts/models:/models
-      - ./qwen-tts/outputs:/app/outputs
-    networks:
-      - app-net
-    restart: unless-stopped
+  # tts:
+  #   build: ./qwen-tts
+  #   container_name: jpreader-tts
+  #   runtime: nvidia
+  #   environment:
+  #     - NVIDIA_VISIBLE_DEVICES=all
+  #     - HF_HUB_OFFLINE=1
+  #     - TRANSFORMERS_OFFLINE=1
+  #   ports:
+  #     - "7860:7860"  # WebUI / API server
+  #   volumes:
+  #     - ./qwen-tts/models:/models
+  #     - ./qwen-tts/outputs:/app/outputs
+  #   networks:
+  #     - app-net
+  #   restart: unless-stopped
 
 volumes:
   books_data:

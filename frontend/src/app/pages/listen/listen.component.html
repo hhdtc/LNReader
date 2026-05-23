@@ -1,0 +1,130 @@
+<div class="listen-page">
+  <!-- HEADER -->
+  <header class="listen-header">
+    <a routerLink="/library" class="btn-back">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+      LIBRARY
+    </a>
+    <span class="header-book-title">{{ book()?.title }}</span>
+    <div></div>
+  </header>
+
+  @if (loading()) {
+    <div class="listen-loading">
+      <div class="loading-spinner"></div>
+      <span>LOADING...</span>
+    </div>
+  } @else {
+    <div class="listen-layout">
+
+      <!-- CHAPTER SIDEBAR -->
+      <aside class="chapter-list">
+        <div class="chapter-list-label">CHAPTERS</div>
+        @for (ch of chapterIndex(); track ch.chapter_index) {
+          @let audioInfo = chapterAudio()[ch.chapter_index];
+          @let hasAudio = audioInfo?.has_audio ?? false;
+          @let isCurrent = ch.chapter_index === currentChapter();
+          <div
+            class="chapter-row"
+            [class.active]="isCurrent"
+            [class.no-audio]="!hasAudio"
+            (click)="jumpToChapter(ch.chapter_index)">
+            <span class="chapter-num">{{ ch.chapter_index + 1 }}</span>
+            <span class="chapter-name">{{ ch.chapter_title }}</span>
+            <span class="chapter-dur">{{ getChapterDuration(ch.chapter_index) }}</span>
+            @if (hasAudio) {
+              <svg class="chapter-audio-icon" width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M3 18v-6a9 9 0 0 1 18 0v6"/>
+                <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/>
+              </svg>
+            }
+          </div>
+        }
+      </aside>
+
+      <!-- PLAYER -->
+      <main class="player-area">
+        <!-- Book cover -->
+        @if (book()?.cover_path) {
+          <img class="player-cover" [src]="'/api/books/' + book()!.id + '/cover'" [alt]="book()!.title">
+        } @else {
+          <div class="player-cover-placeholder">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+            </svg>
+          </div>
+        }
+
+        <div class="player-chapter-title">{{ chapterTitle(currentChapter()) }}</div>
+
+        @if (!hasAudioForChapter()) {
+          <p class="no-audio-msg">No audio for this chapter.</p>
+        }
+
+        <!-- Hidden audio element -->
+        <audio #audioEl
+          (timeupdate)="onTimeUpdate()"
+          (ended)="onEnded()"
+          (durationchange)="onDurationChange()">
+        </audio>
+
+        <!-- Progress bar -->
+        <div class="progress-area">
+          <input
+            type="range"
+            class="progress-bar"
+            [min]="0"
+            [max]="duration() || 1"
+            [value]="currentTime()"
+            (input)="onSeek($event)"
+            [disabled]="!hasAudioForChapter()">
+          <div class="time-row">
+            <span>{{ formatTime(currentTime()) }}</span>
+            <span>{{ formatTime(duration()) }}</span>
+          </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="player-controls">
+          <button class="ctrl-btn" (click)="prevChapter()" [disabled]="currentChapter() === 0" title="Previous chapter">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/>
+            </svg>
+          </button>
+
+          <button class="ctrl-btn ctrl-play" (click)="togglePlay()" [disabled]="!hasAudioForChapter()">
+            @if (isPlaying()) {
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+              </svg>
+            } @else {
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+              </svg>
+            }
+          </button>
+
+          <button class="ctrl-btn" (click)="nextChapter()"
+            [disabled]="currentChapter() >= (book()?.total_chapters ?? 0) - 1" title="Next chapter">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Speed selector -->
+        <div class="speed-row">
+          @for (s of speeds; track s) {
+            <button
+              class="speed-btn"
+              [class.active]="playbackRate() === s"
+              (click)="setSpeed(s)">{{ s }}x</button>
+          }
+        </div>
+      </main>
+    </div>
+  }
+</div>
