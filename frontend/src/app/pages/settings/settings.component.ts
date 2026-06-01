@@ -119,6 +119,21 @@ export class SettingsComponent implements OnInit {
     return this.providers.find(p => p.value === v)?.label ?? v;
   }
 
+  selectVbProfile(value: string) {
+    this.vbProfileId.set(value);
+    this.settings.update({ voicebox_profile_id: value });
+  }
+
+  selectVbLanguage(value: string) {
+    this.vbLanguage.set(value);
+    this.settings.update({ voicebox_language: value });
+  }
+
+  selectVbModelSize(value: string) {
+    this.vbModelSize.set(value);
+    this.settings.update({ voicebox_model_size: value });
+  }
+
   getSelectedProfileName(): string {
     const id = this.vbProfileId();
     const found = this.vbProfiles().find(p => p.id === id);

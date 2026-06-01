@@ -23,7 +23,7 @@
       <aside class="chapter-list">
         <div class="chapter-list-label">CHAPTERS</div>
         @for (ch of chapterIndex(); track ch.chapter_index) {
-          @let audioInfo = chapterAudio()[ch.chapter_index];
+          @let audioInfo = chapterAudioMap().get(ch.chapter_index);
           @let hasAudio = audioInfo?.has_audio ?? false;
           @let isCurrent = ch.chapter_index === currentChapter();
           <div

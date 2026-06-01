@@ -118,6 +118,10 @@ export class ApiService {
     return this.http.post<AudioJobStatus>(`${this.base}/api/voicebox/generate/${bookId}`, {});
   }
 
+  cancelAudioGeneration(bookId: number): Observable<AudioJobStatus> {
+    return this.http.post<AudioJobStatus>(`${this.base}/api/voicebox/cancel/${bookId}`, {});
+  }
+
   getAudioStatus(bookId: number): Observable<AudioStatusResponse> {
     return this.http.get<AudioStatusResponse>(`${this.base}/api/voicebox/status/${bookId}`);
   }

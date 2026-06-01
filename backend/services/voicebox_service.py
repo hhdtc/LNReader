@@ -1,7 +1,7 @@
+import asyncio
 import io
 import os
 import wave
-import tempfile
 import re
 from typing import List, Tuple
 import httpx
@@ -92,6 +92,29 @@ async def list_profiles(base_url: str) -> list:
         return resp.json()
 
 
+async def _wait_for_audio(
+    client: httpx.AsyncClient,
+    base_url: str,
+    gen_id: str,
+    poll_interval: float = 10.0,
+    timeout: float = 600.0,
+) -> dict:
+    """Poll GET /history/{gen_id} until status is no longer 'generating'."""
+    elapsed = 0.0
+    while elapsed < timeout:
+        resp = await client.get(f"{base_url}/history/{gen_id}")
+        resp.raise_for_status()
+        data = resp.json()
+        status = data.get("status", "")
+        if status == "error":
+            raise RuntimeError(f"Voicebox generation failed for id={gen_id}: {data.get('error')}")
+        if status != "generating":
+            return data
+        await asyncio.sleep(poll_interval)
+        elapsed += poll_interval
+    raise TimeoutError(f"Audio generation timed out after {timeout}s for id={gen_id}")
+
+
 async def generate_chapter_audio(
     book_id: int,
     chapter_index: int,
@@ -122,15 +145,15 @@ async def generate_chapter_audio(
                 },
             )
             gen_resp.raise_for_status()
-            gen_data = gen_resp.json()
-            gen_id = gen_data["id"]
-            total_duration += float(gen_data.get("duration", 0))
+            gen_id = gen_resp.json()["id"]
+
+            history = await _wait_for_audio(client, base_url, gen_id)
+            total_duration += float(history.get("duration", 0))
 
             audio_resp = await client.get(f"{base_url}/audio/{gen_id}")
             audio_resp.raise_for_status()
             wav_chunks.append(audio_resp.content)
 
-            # clean up from voicebox history
             try:
                 await client.delete(f"{base_url}/history/{gen_id}")
             except Exception:
@@ -140,7 +163,7 @@ async def generate_chapter_audio(
 
     out_dir = os.path.join(audio_dir, str(book_id))
     os.makedirs(out_dir, exist_ok=True)
-    out_path = os.path.join(out_dir, f"chapter_{chapter_index}.wav")
+    out_path = os.path.abspath(os.path.join(out_dir, f"chapter_{chapter_index}.wav"))
     with open(out_path, "wb") as f:
         f.write(combined)
 

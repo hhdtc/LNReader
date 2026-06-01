@@ -126,6 +126,19 @@ export class LibraryComponent implements OnInit, OnDestroy {
     });
   }
 
+  stopGeneration(book: Book, event: MouseEvent) {
+    event.stopPropagation();
+    this.api.cancelAudioGeneration(book.id).subscribe({
+      next: (job) => {
+        const map = new Map(this.audioJobs());
+        map.set(book.id, job);
+        this.audioJobs.set(map);
+        this.startPollingIfNeeded();
+      },
+      error: () => {}
+    });
+  }
+
   deleteAudio(book: Book, event: MouseEvent) {
     event.stopPropagation();
     if (!confirm(`Delete all audio for "${book.title}"?`)) return;

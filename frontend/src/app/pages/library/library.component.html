@@ -134,6 +134,15 @@
                   <span class="audio-spinner"></span>
                   {{ formatProgress(job) }}
                 </span>
+                @if (job.chapters_done > 0) {
+                  <button class="btn-audio-listen" (click)="openListen(book, $event)" title="Listen">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+                    LISTEN
+                  </button>
+                }
+                <button class="btn-audio-del" (click)="stopGeneration(book, $event)" title="Stop generation">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+                </button>
               } @else if (job.status === 'done') {
                 <button class="btn-audio-listen" (click)="openListen(book, $event)" title="Listen">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
@@ -145,6 +154,20 @@
               } @else if (job.status === 'failed') {
                 <span class="audio-status-text audio-failed">FAILED</span>
                 <button class="btn-audio-gen" (click)="generateAudio(book, $event)">RETRY</button>
+              } @else if (job.status === 'cancelled') {
+                @if (job.chapters_done > 0) {
+                  <button class="btn-audio-listen" (click)="openListen(book, $event)" title="Listen">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+                    LISTEN
+                  </button>
+                }
+                <button class="btn-audio-gen" (click)="generateAudio(book, $event)" title="Resume generation">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm-1 14V8l6 4-6 4z"/></svg>
+                  RESUME
+                </button>
+                <button class="btn-audio-del" (click)="deleteAudio(book, $event)" title="Delete audio">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                </button>
               }
             </div>
             <button class="btn-delete" (click)="deleteBook(book, $event)" title="Delete">

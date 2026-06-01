@@ -60,6 +60,10 @@ def _run_generation(book_id: int, db_session_factory):
 
         async def _generate_all():
             for idx, chapter in enumerate(chapters):
+                db.refresh(job)
+                if job.status == "cancelled":
+                    break
+
                 existing = (
                     db.query(ChapterAudio)
                     .filter(ChapterAudio.book_id == book_id, ChapterAudio.chapter_index == idx)
@@ -70,6 +74,11 @@ def _run_generation(book_id: int, db_session_factory):
                     db.add(existing)
                     db.commit()
                     db.refresh(existing)
+
+                if existing and existing.status == "done":
+                    job.chapters_done += 1
+                    db.commit()
+                    continue
 
                 plain = voicebox_service.extract_plain_text(chapter.get("content", ""))
                 if not plain.strip():
@@ -106,8 +115,10 @@ def _run_generation(book_id: int, db_session_factory):
 
         asyncio.run(_generate_all())
 
-        job.status = "done"
-        job.completed_at = datetime.utcnow()
+        db.refresh(job)
+        if job.status != "cancelled":
+            job.status = "done"
+            job.completed_at = datetime.utcnow()
         db.commit()
 
     except Exception as e:
@@ -182,6 +193,17 @@ def start_generation(book_id: int, background_tasks: BackgroundTasks, db: Sessio
     from database import SessionLocal
     background_tasks.add_task(_run_generation, book_id, SessionLocal)
 
+    return _job_response(job)
+
+
+@router.post("/cancel/{book_id}", response_model=AudioJobStatus)
+def cancel_generation(book_id: int, db: Session = Depends(get_db)):
+    job = db.query(BookAudioJob).filter(BookAudioJob.book_id == book_id).first()
+    if not job or job.status != "running":
+        raise HTTPException(400, "No running job for this book")
+    job.status = "cancelled"
+    db.commit()
+    db.refresh(job)
     return _job_response(job)
 
 

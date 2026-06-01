@@ -146,7 +146,7 @@
         <div class="field-group">
           <label class="field-label">VOICE PROFILE</label>
           <div class="profile-row">
-            <select class="field-select flex-1" [value]="vbProfileId()" (change)="vbProfileId.set($any($event.target).value)">
+            <select class="field-select flex-1" [value]="vbProfileId()" (change)="selectVbProfile($any($event.target).value)">
               <option value="">-- select profile --</option>
               @for (p of vbProfiles(); track p.id) {
                 <option [value]="p.id">{{ p.name }} ({{ p.language }})</option>
@@ -168,7 +168,7 @@
         <div class="field-group field-row">
           <div class="field-col-lg">
             <label class="field-label">SPEECH LANGUAGE</label>
-            <select class="field-select" [value]="vbLanguage()" (change)="vbLanguage.set($any($event.target).value)">
+            <select class="field-select" [value]="vbLanguage()" (change)="selectVbLanguage($any($event.target).value)">
               @for (l of vbLanguages; track l.value) {
                 <option [value]="l.value">{{ l.label }}</option>
               }
@@ -176,7 +176,7 @@
           </div>
           <div class="field-col-sm">
             <label class="field-label">MODEL SIZE</label>
-            <select class="field-select" [value]="vbModelSize()" (change)="vbModelSize.set($any($event.target).value)">
+            <select class="field-select" [value]="vbModelSize()" (change)="selectVbModelSize($any($event.target).value)">
               @for (m of vbModelSizes; track m.value) {
                 <option [value]="m.value">{{ m.value }}</option>
               }

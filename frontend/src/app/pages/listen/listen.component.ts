@@ -8,7 +8,6 @@ import { AuthService } from '../../services/auth.service';
 import {
   Book, ChapterSummary, ChapterAudioInfo, AudioStatusResponse, ListeningProgress
 } from '../../models/book.model';
-
 @Component({
   selector: 'app-listen',
   imports: [CommonModule, RouterLink],
@@ -28,7 +27,14 @@ export class ListenComponent implements OnInit, OnDestroy {
   playbackRate = signal(1);
   loading = signal(true);
 
+  chapterAudioMap = computed(() => {
+    const map = new Map<number, ChapterAudioInfo>();
+    for (const c of this.chapterAudio()) map.set(c.chapter_index, c);
+    return map;
+  });
+
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
   private bookId = 0;
 
   speeds = [0.75, 1, 1.25, 1.5, 2];
@@ -50,7 +56,11 @@ export class ListenComponent implements OnInit, OnDestroy {
     Promise.all([
       new Promise<void>(r => this.api.getBook(this.bookId).subscribe(b => { this.book.set(b); r(); })),
       new Promise<void>(r => this.api.getChapterIndex(this.bookId).subscribe(idx => { this.chapterIndex.set(idx); r(); })),
-      new Promise<void>(r => this.api.getAudioStatus(this.bookId).subscribe(s => { this.chapterAudio.set(s.chapters); r(); })),
+      new Promise<void>(r => this.api.getAudioStatus(this.bookId).subscribe(s => {
+        this.chapterAudio.set(s.chapters);
+        if (s.job.status === 'running') this.startPolling();
+        r();
+      })),
       new Promise<void>(r => this.api.getListeningProgress(this.bookId).subscribe(p => {
         this.currentChapter.set(p.chapter_index);
         this._resumePosition = p.position_seconds;
@@ -66,6 +76,7 @@ export class ListenComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     if (this.saveTimer) clearTimeout(this.saveTimer);
+    if (this.pollTimer) clearInterval(this.pollTimer);
     this.saveProgress();
   }
 
@@ -199,6 +210,18 @@ export class ListenComponent implements OnInit, OnDestroy {
       chapter_index: this.currentChapter(),
       position_seconds: el?.currentTime ?? 0,
     }).subscribe();
+  }
+
+  private startPolling() {
+    this.pollTimer = setInterval(() => {
+      this.api.getAudioStatus(this.bookId).subscribe(s => {
+        this.chapterAudio.set(s.chapters);
+        if (s.job.status !== 'running') {
+          clearInterval(this.pollTimer!);
+          this.pollTimer = null;
+        }
+      });
+    }, 10000);
   }
 
   formatTime(secs: number): string {
