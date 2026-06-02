@@ -115,6 +115,30 @@ export class SettingsComponent implements OnInit {
     });
   }
 
+  // TTS voice
+  ttsRefUploading = signal(false);
+  ttsRefUploadStatus = signal<'idle' | 'ok' | 'error'>('idle');
+  ttsRefFileName = signal('');
+
+  uploadTtsRef(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    this.ttsRefFileName.set(file.name);
+    this.ttsRefUploading.set(true);
+    this.ttsRefUploadStatus.set('idle');
+    this.api.uploadTtsRefAudio(file).subscribe({
+      next: () => {
+        this.ttsRefUploading.set(false);
+        this.ttsRefUploadStatus.set('ok');
+      },
+      error: () => {
+        this.ttsRefUploading.set(false);
+        this.ttsRefUploadStatus.set('error');
+      },
+    });
+  }
+
   getProviderLabel(v: string) {
     return this.providers.find(p => p.value === v)?.label ?? v;
   }

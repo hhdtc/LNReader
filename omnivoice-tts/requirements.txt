@@ -1,0 +1,8 @@
+torch==2.8.0+cu128
+torchaudio==2.8.0+cu128
+--extra-index-url https://download.pytorch.org/whl/cu128
+
+omnivoice
+soundfile
+fastapi
+uvicorn[standard]

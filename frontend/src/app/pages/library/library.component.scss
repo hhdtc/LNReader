@@ -468,7 +468,10 @@
   flex-wrap: wrap;
 }
 
-.btn-audio-gen,
+.btn-audio-gen {
+  display: none !important;
+}
+
 .btn-audio-listen {
   display: flex;
   align-items: center;

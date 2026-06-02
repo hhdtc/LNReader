@@ -34,6 +34,22 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  tts:
+    build: ./omnivoice-tts
+    container_name: jpreader-tts
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - OMNIVOICE_DEVICE=cuda:0
+    ports:
+      - "8765:8765"
+    volumes:
+      - omnivoice_cache:/root/.cache/huggingface
+      - omnivoice_refaudio:/app/data
+    networks:
+      - app-net
+    restart: unless-stopped
+
   # tts:
   #   image: xxxxrt666/gpt-sovits:latest-cu128
   #   container_name: jpreader-tts
@@ -80,6 +96,8 @@ services:
 volumes:
   books_data:
   db_data:
+  omnivoice_cache:
+  omnivoice_refaudio:
 
 networks:
   app-net:

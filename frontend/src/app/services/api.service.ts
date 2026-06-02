@@ -88,6 +88,12 @@ export class ApiService {
     return this.http.post<{ audio_base64: string }>(`${this.base}/api/tts`, { text, ref_audio_base64: refAudioBase64 });
   }
 
+  uploadTtsRefAudio(file: File): Observable<{ status: string; ref_audio: string }> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post<{ status: string; ref_audio: string }>(`${this.base}/api/tts/ref-audio`, form);
+  }
+
   // Voicebox
   // Direct Voicebox calls (browser → Voicebox, avoids Docker loopback issue)
   getVoiceboxProfilesDirect(url: string, port: number): Observable<VoiceboxProfile[]> {
