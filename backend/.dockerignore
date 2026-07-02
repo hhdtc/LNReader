@@ -2,6 +2,6 @@ venv/
 __pycache__/
 *.pyc
 .env
-jpreader.db
+lnreader.db
 books/
 .git

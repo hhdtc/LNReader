@@ -1,4 +1,4 @@
-# JPReader — Architecture & Functionality Reference
+# LNreader — Architecture & Functionality Reference
 
 ## Table of Contents
 
@@ -33,7 +33,7 @@
 
 ## 1. Project Overview
 
-JPReader is a self-hosted e-book reader focused on Japanese content. Core features:
+LNreader is a self-hosted e-book reader focused on Japanese content. Core features:
 
 - EPUB and plain-text book library management
 - Virtual-scroll and paginated reading modes
@@ -59,7 +59,7 @@ JPReader is a self-hosted e-book reader focused on Japanese content. Core featur
 ## 2. Repository Structure
 
 ```
-JPReader/
+LNreader/
 ├── backend/
 │   ├── main.py              # FastAPI app entry point
 │   ├── database.py          # SQLAlchemy models + session factory
@@ -494,7 +494,7 @@ Runs as a separate Docker container on port 7860 using Qwen3-TTS-12Hz-1.7B-Base 
 
 **Endpoint consumed by backend:**
 ```
-POST http://jpreader-tts:7860/qwenapi/v1/voice-clone
+POST http://lnreader-tts:7860/qwenapi/v1/voice-clone
 Body:
 {
   "model_name": "/models/Qwen3-TTS-12Hz-1.7B-Base",
@@ -518,7 +518,7 @@ Reference audio source: the frontend loads `/ref/tts_ref.wav` (served as a stati
 
 ## 6. Voicebox Chapter-Audio Pipeline
 
-Voicebox is a separate, locally-running TTS server. JPReader's backend proxies all Voicebox calls — the frontend never contacts Voicebox directly.
+Voicebox is a separate, locally-running TTS server. LNreader's backend proxies all Voicebox calls — the frontend never contacts Voicebox directly.
 
 ### 6.1 Database Tables
 
@@ -937,7 +937,7 @@ User leaves page (ngOnDestroy)
 | `BACKEND_URL` | `http://localhost:8000` | OAuth callback URI base |
 | `BOOKS_DIR` | `./books` | Directory for uploaded book files |
 | `AUDIO_DIR` | `./audio` | Directory for generated chapter WAV files |
-| `DATABASE_URL` | `sqlite:///./jpreader.db` | SQLAlchemy connection string |
+| `DATABASE_URL` | `sqlite:///./lnreader.db` | SQLAlchemy connection string |
 
 ### Docker Compose Services
 

@@ -1,12 +1,12 @@
 services:
   backend:
     build: ./backend
-    container_name: jpreader-backend
+    container_name: lnreader-backend
     env_file: ./backend/.env
     environment:
       - FRONTEND_URL=http://localhost
       - BOOKS_DIR=/app/books
-      - DATABASE_URL=sqlite:////app/data/jpreader.db
+      - DATABASE_URL=sqlite:////app/data/lnreader.db
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -24,7 +24,7 @@ services:
 
   frontend:
     build: ./frontend
-    container_name: jpreader-frontend
+    container_name: lnreader-frontend
     ports:
       - "8080:80"
     networks:
@@ -36,7 +36,7 @@ services:
 
   tts:
     build: ./omnivoice-tts
-    container_name: jpreader-tts
+    container_name: lnreader-tts
     runtime: nvidia
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
@@ -52,7 +52,7 @@ services:
 
   # tts:
   #   image: xxxxrt666/gpt-sovits:latest-cu128
-  #   container_name: jpreader-tts
+  #   container_name: lnreader-tts
   #   runtime: nvidia
   #   environment:
   #     - NVIDIA_VISIBLE_DEVICES=all
@@ -78,7 +78,7 @@ services:
 
   # tts:
   #   build: ./qwen-tts
-  #   container_name: jpreader-tts
+  #   container_name: lnreader-tts
   #   runtime: nvidia
   #   environment:
   #     - NVIDIA_VISIBLE_DEVICES=all

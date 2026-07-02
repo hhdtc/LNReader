@@ -21,8 +21,17 @@ export class AuthService {
         this.loading.set(false);
       },
       error: () => {
-        this.user.set(null);
-        this.loading.set(false);
+        // Auto-login locally — no OAuth required
+        this.api.loginLocal().subscribe({
+          next: ({ token }) => {
+            localStorage.setItem('auth_token', token);
+            this.api.getUser().subscribe({
+              next: (u) => { this.user.set(u); this.loading.set(false); },
+              error: () => { this.loading.set(false); }
+            });
+          },
+          error: () => { this.loading.set(false); }
+        });
       }
     });
   }

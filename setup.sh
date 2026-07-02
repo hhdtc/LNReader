@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "=== jpReader Setup ==="
+echo "=== LNreader Setup ==="
 
 # Backend
 echo "[1/3] Setting up Python backend..."

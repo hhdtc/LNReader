@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "=== Starting jpReader ==="
+echo "=== Starting LNreader ==="
 
 # Start backend
 cd backend

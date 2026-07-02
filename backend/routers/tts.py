@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/tts", tags=["tts"])
 
-TTS_BASE = os.getenv("TTS_URL_BASE", "http://jpreader-tts:8765")
+TTS_BASE = os.getenv("TTS_URL_BASE", "http://lnreader-tts:8765")
 
 
 class TTSRequest(BaseModel):

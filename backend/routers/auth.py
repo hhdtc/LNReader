@@ -123,10 +123,21 @@ async def auth_callback(code: str = None, error: str = None, db: Session = Depen
 
 @router.get("/user")
 async def get_user(db: Session = Depends(get_db)):
-    """Return stored user info (no token required for single-user local app)."""
+    """Return stored user info; auto-creates local session if none exists."""
     settings = db.query(UserSettings).first()
     if not settings or not settings.google_user_email:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        # Auto-initialize local user — no login required for local use
+        if settings:
+            settings.google_user_email = "local@localhost"
+            settings.google_user_name = "Local User"
+            settings.google_user_picture = ""
+            db.commit()
+        return {
+            "email": "local@localhost",
+            "name": "Local User",
+            "picture": "",
+            "is_authenticated": True
+        }
     return {
         "email": settings.google_user_email,
         "name": settings.google_user_name,

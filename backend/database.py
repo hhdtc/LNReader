@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./jpreader.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./lnreader.db")
 BOOKS_DIR = os.getenv("BOOKS_DIR", "./books")
 AUDIO_DIR = os.getenv("AUDIO_DIR", "./audio")
 

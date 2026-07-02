@@ -12,8 +12,8 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:4200")
 BOOKS_DIR = os.getenv("BOOKS_DIR", "./books")
 
 app = FastAPI(
-    title="jpReader API",
-    description="Backend API for jpReader - an EPUB/TXT reader with Japanese support",
+    title="LNreader API",
+    description="Backend API for LNreader - an EPUB/TXT reader with Japanese support",
     version="1.0.0",
 )
 
@@ -45,7 +45,7 @@ async def startup():
 
 @app.get("/")
 async def root():
-    return {"message": "jpReader API", "version": "1.0.0"}
+    return {"message": "LNreader API", "version": "1.0.0"}
 
 
 @app.get("/health")

@@ -1,5 +1,5 @@
 @echo off
-echo === jpReader Setup ===
+echo === LNreader Setup ===
 echo.
 
 REM Check Python

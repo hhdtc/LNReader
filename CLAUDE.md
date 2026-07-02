@@ -1,4 +1,4 @@
-# JPReader — Claude Instructions
+# LNreader — Claude Instructions
 
 ## Architecture Reference
 
