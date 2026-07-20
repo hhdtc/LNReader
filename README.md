@@ -39,8 +39,8 @@ A self-hosted e-book reader built for Japanese light novels and literature. Uplo
 - Supports three providers: **DeepL**, **Google Translate**, **OpenAI (GPT-4o-mini)**
 - Configure provider and API key in Settings
 
-### 🔊 TTS Audio (Voicebox)
-- Generate chapter-by-chapter audio using a locally-running [Voicebox](https://voicevox.hiroshiba.jp/) TTS server
+### 🔊 TTS Audio (OmniVoice)
+- Generate chapter-by-chapter audio using a locally-running [OmniVoice](https://github.com/k2-fsa/OmniVoice) TTS server
 - Background generation — progress shown per-chapter on library cards
 - Dedicated **Listening** page (`/listen/:id`) with:
   - Play/pause, seek bar, playback speed control
@@ -51,7 +51,7 @@ A self-hosted e-book reader built for Japanese light novels and literature. Uplo
 ### ⚙️ Settings
 - Translation provider selection with API key storage
 - TTS voice — upload a reference WAV/MP3 clip for voice cloning
-- Voicebox server URL, port, voice profile, language, model size
+- OmniVoice server URL, port, voice profile, language, model size
 
 ### 🔐 Authentication
 - **Local dev mode** — click *Continue Locally* for a zero-config JWT session
