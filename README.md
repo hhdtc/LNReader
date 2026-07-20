@@ -55,7 +55,6 @@ A self-hosted e-book reader built for Japanese light novels and literature. Uplo
 
 ### 🔐 Authentication
 - **Local dev mode** — click *Continue Locally* for a zero-config JWT session
-- **Google OAuth** — sign in with a Google account (requires `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`)
 
 ---
 
