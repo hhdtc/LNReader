@@ -55,18 +55,6 @@
     </div>
 
     <div class="header-actions">
-      <!-- Japanese annotation toggle (only for JP books) -->
-      @if (book()?.language === 'ja') {
-        <button
-          class="btn-icon"
-          [class.active]="annotateJP()"
-          [class.light]="isLight()"
-          (click)="toggleAnnotate()"
-          title="Toggle Japanese annotation">
-          <span class="jp-badge">日</span>
-        </button>
-      }
-
 
       <!-- TTS toggle -->
       <button
