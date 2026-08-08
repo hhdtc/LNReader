@@ -27,6 +27,17 @@ A self-hosted e-book reader built for Japanese light novels and literature. Uplo
 - Delete books from the library
 - Supports books of any size
 
+### 🔍 Search
+- Unified search bar on the library page — queries your **local library** (title/author) and the **bilinovel.com** mirror of linovelib.com at once
+- Results show cover, author, publisher, status, rating, tags, and description; clicking a result opens the novel page on the site
+- No cookies or configuration required: the backend replays the site's Jieqi search-guard flow (css/js/redeem cookies) with a Chrome TLS-fingerprint-impersonated HTTP client
+
+### 📥 Download from Bilinovel
+- One-click **Download** on any search result — the backend scrapes the novel (catalog, multi-page chapters, illustrations) and packs it into an EPUB, then registers it into your library exactly like an upload
+- Background job with live progress on the result card (`12 / 620`), cancellable mid-flight; turns into **READ** once finished
+- Handles the site's anti-scrape measures: hidden chapter URLs (resolved via next/prev chapter probing), lazy-loaded images, obfuscated image hosts, and the paragraph-shuffle restore driven by `chapterlog.js` parameters
+- Downloads respect the site's rate limits (15 text / 10 image requests per minute), so large novels take a while — same pacing as the bili_novel_packer project
+
 ### 📖 Reader
 - **Scroll mode** — continuous reading with virtual DOM windowing for performance
 - **Paginate mode** — one page at a time with ← → keyboard navigation
