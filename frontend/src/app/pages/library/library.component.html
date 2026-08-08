@@ -33,6 +33,34 @@
       </div>
     </div>
 
+    <!-- SEARCH BAR -->
+    <div class="search-bar" data-reveal>
+      <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input
+        class="search-input"
+        type="text"
+        [value]="searchQuery()"
+        (input)="onSearchInput($any($event.target).value)"
+        (keyup.enter)="doSearch()"
+        placeholder="SEARCH YOUR LIBRARY &amp; LINOVELIB.COM..."
+        autocomplete="off">
+      @if (searchQuery()) {
+        <button class="search-clear" (click)="clearSearch()" title="Clear search">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      }
+      <button class="search-btn" (click)="doSearch()" [disabled]="searching()">
+        @if (searching()) {
+          <span class="search-spinner"></span>
+        } @else {
+          SEARCH
+        }
+      </button>
+    </div>
+
     <!-- UPLOAD ZONE -->
     <div
       class="upload-zone"
@@ -74,11 +102,116 @@
       </div>
     }
 
-    <!-- BOOKS GRID -->
+    <!-- BOOKS GRID / SEARCH RESULTS -->
     @if (loading()) {
       <div class="loading-state">
         <div class="loading-spinner"></div>
         <span>LOADING LIBRARY...</span>
+      </div>
+    } @else if (searchResults(); as res) {
+      <div class="search-results" data-reveal>
+        <div class="results-header">
+          <span class="results-title">RESULTS FOR "{{ res.query | uppercase }}"</span>
+          <button class="results-clear" (click)="clearSearch()">BACK TO LIBRARY</button>
+        </div>
+
+        <!-- LOCAL -->
+        <div class="results-section">
+          <h3 class="results-label">LOCAL LIBRARY ({{ res.local.length }})</h3>
+          @if (res.local.length === 0) {
+            <p class="results-empty">No books in your library match.</p>
+          } @else {
+            <div class="local-results">
+              @for (book of res.local; track book.id) {
+                <div class="local-result" (click)="openBook(book)">
+                  <div class="local-cover">
+                    @if (book.cover_path) {
+                      <img [src]="getCoverUrl(book)" [alt]="book.title" loading="lazy">
+                    } @else {
+                      <span>{{ book.title | slice:0:1 | uppercase }}</span>
+                    }
+                  </div>
+                  <div class="local-info">
+                    <span class="local-title">{{ book.title }}</span>
+                    <span class="local-author">{{ book.author }}</span>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+        <!-- LINOVELIB -->
+        <div class="results-section">
+          <h3 class="results-label">LINOVELIB.COM ({{ res.linovelib_total }})</h3>
+          @if (res.linovelib_error) {
+            <div class="error-banner">
+              <span class="error-icon">!</span>
+              {{ res.linovelib_error }}
+              <a routerLink="/settings" class="error-link">OPEN SETTINGS</a>
+            </div>
+          } @else if (res.linovelib.length === 0) {
+            <p class="results-empty">No matches on linovelib.com.</p>
+          } @else {
+            <div class="linovelib-results">
+              @for (book of res.linovelib; track book.url) {
+                @let job = getDownloadJob(book);
+                @let starting = isDownloadStarting(book);
+                <div class="linovelib-result" (click)="openLinovelib(book)">
+                  <div class="linovelib-cover">
+                    @if (book.cover_url) {
+                      <img [src]="book.cover_url" [alt]="book.title" loading="lazy">
+                    } @else {
+                      <span>{{ book.title | slice:0:1 | uppercase }}</span>
+                    }
+                  </div>
+                  <div class="linovelib-info">
+                    <span class="linovelib-title">{{ book.title }}</span>
+                    <span class="linovelib-meta">
+                      {{ book.author }}
+                      @if (book.publisher) { · {{ book.publisher }} }
+                      @if (book.status) { · {{ book.status }} }
+                      @if (book.rating) { · ★ {{ book.rating }} }
+                    </span>
+                    @if (book.description) {
+                      <span class="linovelib-desc">{{ book.description | slice:0:140 }}</span>
+                    }
+                    @if (book.tags) {
+                      <span class="linovelib-tags">{{ book.tags }}</span>
+                    }
+                  </div>
+                  <div class="linovelib-actions" (click)="$event.stopPropagation()">
+                    @if (starting) {
+                      <button class="btn-download" disabled>
+                        <span class="search-spinner"></span>
+                      </button>
+                    } @else if (!job || job.status === 'failed') {
+                      <button class="btn-download" (click)="downloadNovel(book, $event)">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        {{ job ? 'RETRY' : 'DOWNLOAD' }}
+                      </button>
+                    } @else if (job.status === 'running' || job.status === 'cancelled') {
+                      <button class="btn-download btn-download-running" (click)="job.status === 'running' && cancelJob(book, $event)" [title]="job.status === 'running' ? 'Cancel' : 'Cancelled'">
+                        <span class="audio-spinner"></span>
+                        {{ job.chapters_done }} / {{ job.total_chapters }}
+                      </button>
+                    } @else if (job.status === 'done') {
+                      <button class="btn-download btn-download-done" (click)="openDownloadedBook(book, $event)">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                        READ
+                      </button>
+                    }
+                  </div>
+                  <svg class="linovelib-ext" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                    <polyline points="15 3 21 3 21 9"/>
+                    <line x1="10" y1="14" x2="21" y2="3"/>
+                  </svg>
+                </div>
+              }
+            </div>
+          }
+        </div>
       </div>
     } @else if (books().length === 0) {
       <div class="empty-state" data-reveal>

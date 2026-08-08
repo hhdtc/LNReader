@@ -1,4 +1,5 @@
 import { Injectable, signal } from '@angular/core';
+import { Observable, tap } from 'rxjs';
 import { ApiService } from './api.service';
 import { UserSettings } from '../models/book.model';
 
@@ -26,14 +27,11 @@ export class SettingsService {
   settings = signal<UserSettings>({ ...DEFAULTS });
 
   constructor(private api: ApiService) {
-    this.load();
+    this.load().subscribe({ error: () => {} });
   }
 
-  load() {
-    this.api.getSettings().subscribe({
-      next: (s) => this.settings.set(s),
-      error: () => {}
-    });
+  load(): Observable<UserSettings> {
+    return this.api.getSettings().pipe(tap((s) => this.settings.set(s)));
   }
 
   update(data: Partial<UserSettings>) {

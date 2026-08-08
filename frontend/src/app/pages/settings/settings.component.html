@@ -124,6 +124,35 @@
 
     <!-- VOICEBOX ENGINE (hidden) -->
 
+    <!-- LINOVELIB SEARCH -->
+    <section class="settings-card" data-reveal>
+      <div class="card-label">
+        <div class="label-dot"></div>
+        <span>LINOVELIB SEARCH</span>
+      </div>
+      <div class="card-body">
+        <p class="hint-text">
+          Search results from <strong>linovelib.com</strong> are served through its
+          <strong>bilinovel.com</strong> mirror, which requires no cookies or Cloudflare
+          clearance — nothing to configure here.
+        </p>
+        <div class="save-row">
+          <button class="btn-secondary" (click)="testLinovelib()" [disabled]="linovelibTesting()">
+            {{ linovelibTesting() ? 'TESTING...' : 'TEST CONNECTION' }}
+          </button>
+        </div>
+        @if (linovelibTestStatus() === 'ok') {
+          @if (linovelibTestCount() > 0) {
+            <p class="status-ok">Linovelib search works — {{ linovelibTestCount() }} result(s) for probe query.</p>
+          } @else {
+            <p class="status-ok">Linovelib connection works (probe query returned no results).</p>
+          }
+        } @else if (linovelibTestStatus() === 'error') {
+          <p class="field-error">{{ linovelibTestMessage() }}</p>
+        }
+      </div>
+    </section>
+
     <!-- TTS VOICE -->
     <section class="settings-card" data-reveal>
       <div class="card-label">

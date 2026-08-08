@@ -5,7 +5,7 @@ import { RouterLink } from '@angular/router';
 import { SettingsService } from '../../services/settings.service';
 import { AuthService } from '../../services/auth.service';
 import { ApiService } from '../../services/api.service';
-import { VoiceboxProfile } from '../../models/book.model';
+import { VoiceboxProfile, UserSettings } from '../../models/book.model';
 
 @Component({
   selector: 'app-settings',
@@ -33,6 +33,12 @@ export class SettingsComponent implements OnInit {
   vbLoadingModel = signal(false);
   vbModelStatus = signal('');
 
+  // Linovelib
+  linovelibTesting = signal(false);
+  linovelibTestStatus = signal<'idle' | 'ok' | 'error'>('idle');
+  linovelibTestMessage = signal('');
+  linovelibTestCount = signal(0);
+
   providers = [
     { value: 'deepl', label: 'DeepL', desc: 'High-quality neural translation. Free tier available.' },
     { value: 'google', label: 'Google Translate', desc: 'Google Cloud Translation API.' },
@@ -59,7 +65,15 @@ export class SettingsComponent implements OnInit {
   constructor(public settings: SettingsService, public auth: AuthService, private api: ApiService) {}
 
   ngOnInit() {
-    const s = this.settings.settings();
+    this.applySettings(this.settings.settings());
+    // load() completes after ngOnInit on first visit; re-apply the server state.
+    this.settings.load().subscribe({
+      next: (s) => this.applySettings(s),
+      error: () => {}
+    });
+  }
+
+  private applySettings(s: UserSettings) {
     this.provider.set(s.translation_provider || 'deepl');
     this.apiKey.set(s.translation_api_key || '');
     this.targetLang.set(s.translation_target_lang || 'en');
@@ -83,6 +97,31 @@ export class SettingsComponent implements OnInit {
     });
     this.saved.set(true);
     setTimeout(() => this.saved.set(false), 2000);
+  }
+
+  testLinovelib() {
+    this.linovelibTesting.set(true);
+    this.linovelibTestStatus.set('idle');
+    this.api.searchBooks('test').subscribe({
+      next: (res) => {
+        this.linovelibTesting.set(false);
+        if (res.linovelib_error) {
+          this.linovelibTestStatus.set('error');
+          this.linovelibTestMessage.set(res.linovelib_error);
+        } else if (res.linovelib_total > 0) {
+          this.linovelibTestStatus.set('ok');
+          this.linovelibTestCount.set(res.linovelib_total);
+        } else {
+          this.linovelibTestStatus.set('ok');
+          this.linovelibTestCount.set(0);
+        }
+      },
+      error: (err) => {
+        this.linovelibTesting.set(false);
+        this.linovelibTestStatus.set('error');
+        this.linovelibTestMessage.set(err?.error?.detail ?? 'Search request failed.');
+      }
+    });
   }
 
   loadProfiles() {

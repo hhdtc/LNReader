@@ -161,7 +161,52 @@ class ListeningProgressResponse(BaseModel):
     book_id: int
     chapter_index: int
     position_seconds: float
-    last_listened_at: Optional[datetime]
+    last_listened_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+# --- Search schemas ---
+
+class LinovelibBookResponse(BaseModel):
+    title: str
+    url: str
+    author: str = ""
+    publisher: str = ""
+    cover_url: str = ""
+    status: str = ""
+    rating: str = ""
+    description: str = ""
+    tags: str = ""
+
+
+class SearchResponse(BaseModel):
+    query: str
+    local: List[BookResponse] = []
+    linovelib: List[LinovelibBookResponse] = []
+    linovelib_total: int = 0
+    linovelib_error: Optional[str] = None
+
+
+# --- Download schemas ---
+
+class DownloadStartRequest(BaseModel):
+    url: str
+
+
+class DownloadJobResponse(BaseModel):
+    id: int
+    novel_id: str
+    novel_url: str
+    title: str = ""
+    status: str
+    chapters_done: int = 0
+    total_chapters: int = 0
+    book_id: Optional[int] = None
+    error: Optional[str] = None
+    created_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

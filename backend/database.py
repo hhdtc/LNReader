@@ -103,6 +103,22 @@ class ListeningProgress(Base):
     last_listened_at = Column(DateTime, default=datetime.utcnow)
 
 
+class BookDownloadJob(Base):
+    __tablename__ = "book_download_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    novel_id = Column(String(20), nullable=False)
+    novel_url = Column(String(500), nullable=False)
+    title = Column(String(500), default="")
+    status = Column(String(20), default="running")  # running/done/failed/cancelled
+    chapters_done = Column(Integer, default=0)
+    total_chapters = Column(Integer, default=0)
+    book_id = Column(Integer, nullable=True)
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+
 def get_db():
     db = SessionLocal()
     try:
@@ -132,6 +148,13 @@ def init_db():
             except Exception:
                 conn.execute(text(sql))
                 conn.commit()
+        # Cleanup: the linovelib cookie column is no longer used.
+        try:
+            conn.execute(text("SELECT linovelib_cookie FROM user_settings LIMIT 1"))
+            conn.execute(text("ALTER TABLE user_settings DROP COLUMN linovelib_cookie"))
+            conn.commit()
+        except Exception:
+            pass
     db = SessionLocal()
     try:
         settings = db.query(UserSettings).first()

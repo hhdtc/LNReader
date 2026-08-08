@@ -102,3 +102,37 @@ export interface ListeningProgress {
   position_seconds: number;
   last_listened_at: string | null;
 }
+
+export interface LinovelibBook {
+  title: string;
+  url: string;
+  author: string;
+  publisher: string;
+  cover_url: string;
+  status: string;
+  rating: string;
+  description: string;
+  tags: string;
+}
+
+export interface SearchResponse {
+  query: string;
+  local: Book[];
+  linovelib: LinovelibBook[];
+  linovelib_total: number;
+  linovelib_error: string | null;
+}
+
+export interface DownloadJob {
+  id: number;
+  novel_id: string;
+  novel_url: string;
+  title: string;
+  status: 'running' | 'done' | 'failed' | 'cancelled';
+  chapters_done: number;
+  total_chapters: number;
+  book_id: number | null;
+  error: string | null;
+  created_at: string | null;
+  completed_at: string | null;
+}

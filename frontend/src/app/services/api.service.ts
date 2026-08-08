@@ -5,7 +5,8 @@ import { environment } from '../../environments/environment';
 import {
   Book, ChapterContent, ReadingProgress,
   UserSettings, TranslationRequest, TranslationResponse, UserInfo, ChapterSummary,
-  VoiceboxProfile, AudioJobStatus, AudioStatusResponse, ListeningProgress
+  VoiceboxProfile, AudioJobStatus, AudioStatusResponse, ListeningProgress, SearchResponse,
+  DownloadJob
 } from '../models/book.model';
 
 @Injectable({ providedIn: 'root' })
@@ -58,6 +59,25 @@ export class ApiService {
 
   getCoverUrl(bookId: number): string {
     return `${this.base}/api/books/${bookId}/cover`;
+  }
+
+  searchBooks(query: string): Observable<SearchResponse> {
+    return this.http.get<SearchResponse>(`${this.base}/api/search`, {
+      params: { q: query }
+    });
+  }
+
+  // Bilinovel downloads
+  startDownload(url: string): Observable<DownloadJob> {
+    return this.http.post<DownloadJob>(`${this.base}/api/downloads`, { url });
+  }
+
+  getDownloadStatus(jobId: number): Observable<DownloadJob> {
+    return this.http.get<DownloadJob>(`${this.base}/api/downloads/${jobId}`);
+  }
+
+  cancelDownload(jobId: number): Observable<DownloadJob> {
+    return this.http.post<DownloadJob>(`${this.base}/api/downloads/${jobId}/cancel`, {});
   }
 
   // Progress
