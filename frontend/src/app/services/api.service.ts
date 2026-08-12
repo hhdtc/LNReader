@@ -104,8 +104,8 @@ export class ApiService {
   }
 
   // TTS (old sentence-by-sentence, kept for compatibility)
-  tts(text: string, refAudioBase64: string): Observable<{ audio_base64: string }> {
-    return this.http.post<{ audio_base64: string }>(`${this.base}/api/tts`, { text, ref_audio_base64: refAudioBase64 });
+  tts(text: string, refAudioBase64: string, language = 'zh'): Observable<{ audio_base64: string }> {
+    return this.http.post<{ audio_base64: string }>(`${this.base}/api/tts`, { text, ref_audio_base64: refAudioBase64, language });
   }
 
   uploadTtsRefAudio(file: File): Observable<{ status: string; ref_audio: string }> {

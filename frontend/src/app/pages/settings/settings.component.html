@@ -161,6 +161,15 @@
       </div>
       <div class="card-body">
         <div class="field-group">
+          <label class="field-label">TTS LANGUAGE</label>
+          <select class="field-select" [value]="ttsLanguage()" (change)="ttsLanguage.set($any($event.target).value)">
+            @for (lang of ttsLanguages; track lang.value) {
+              <option [value]="lang.value">{{ lang.label }}</option>
+            }
+          </select>
+          <p class="field-hint">Language used for speech synthesis. Chinese is the default.</p>
+        </div>
+        <div class="field-group">
           <label class="field-label">REFERENCE AUDIO</label>
           <p class="field-hint">Upload a 3–10 second WAV/MP3 clip. The TTS engine will clone this voice for all future reads.</p>
           <div class="profile-row">

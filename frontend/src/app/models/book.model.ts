@@ -47,6 +47,7 @@ export interface UserSettings {
   voicebox_profile_id: string;
   voicebox_language: string;
   voicebox_model_size: string;
+  tts_language: string;
 }
 
 export interface UserInfo {

@@ -84,6 +84,7 @@ class SettingsUpdate(BaseModel):
     voicebox_profile_id: Optional[str] = None
     voicebox_language: Optional[str] = None
     voicebox_model_size: Optional[str] = None
+    tts_language: Optional[str] = None
 
 
 class SettingsResponse(BaseModel):
@@ -103,6 +104,7 @@ class SettingsResponse(BaseModel):
     voicebox_profile_id: str
     voicebox_language: str
     voicebox_model_size: str
+    tts_language: str
 
     class Config:
         from_attributes = True

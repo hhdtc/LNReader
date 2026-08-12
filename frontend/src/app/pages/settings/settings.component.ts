@@ -62,6 +62,15 @@ export class SettingsComponent implements OnInit {
 
   vbModelSizes = [{ value: '1.7B', label: '1.7B' }];
 
+  // TTS voice language (zh default)
+  ttsLanguage = signal('zh');
+
+  ttsLanguages = [
+    { value: 'zh', label: 'Chinese (Default)' },
+    { value: 'en', label: 'English' },
+    { value: 'ja', label: 'Japanese' },
+  ];
+
   constructor(public settings: SettingsService, public auth: AuthService, private api: ApiService) {}
 
   ngOnInit() {
@@ -82,6 +91,7 @@ export class SettingsComponent implements OnInit {
     this.vbProfileId.set(s.voicebox_profile_id || '');
     this.vbLanguage.set(s.voicebox_language || 'en');
     this.vbModelSize.set(s.voicebox_model_size || '1.7B');
+    this.ttsLanguage.set(s.tts_language || 'zh');
   }
 
   save() {
@@ -94,6 +104,7 @@ export class SettingsComponent implements OnInit {
       voicebox_profile_id: this.vbProfileId(),
       voicebox_language: this.vbLanguage(),
       voicebox_model_size: this.vbModelSize(),
+      tts_language: this.ttsLanguage(),
     });
     this.saved.set(true);
     setTimeout(() => this.saved.set(false), 2000);

@@ -825,7 +825,7 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
     const sentences = this.ttsSentences();
     if (idx < 0 || idx >= sentences.length) return;
     this.ttsFetchingSet.add(idx);
-    this.api.tts(this.cleanTextForTTS(sentences[idx]), this.ttsRefAudioB64).subscribe({
+    this.api.tts(this.cleanTextForTTS(sentences[idx]), this.ttsRefAudioB64, this.settings.settings().tts_language || 'zh').subscribe({
       next: (r) => {
         this.ttsFetchingSet.delete(idx);
         this.ttsAudioCache.set(idx, r.audio_base64);

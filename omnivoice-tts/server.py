@@ -18,7 +18,8 @@ REF_AUDIO_DEFAULT = "/app/ref.wav"
 REF_AUDIO_CUSTOM = "/app/data/ref.wav"
 MODEL_ID = os.getenv("OMNIVOICE_MODEL", "k2-fsa/OmniVoice")
 DEVICE = os.getenv("OMNIVOICE_DEVICE", "cuda:0")
-DTYPE = torch.float16
+# float16 is only usable on CUDA/XPU; CPU inference must run in float32
+DTYPE = torch.float32 if DEVICE.startswith("cpu") else torch.float16
 
 model = None
 
@@ -46,6 +47,7 @@ app = FastAPI(lifespan=lifespan)
 
 class TTSRequest(BaseModel):
     text: str
+    language: str = "zh"  # language code (en/zh/ja) or name; None = agnostic
 
 
 @app.get("/health")
@@ -64,6 +66,7 @@ async def tts(req: TTSRequest):
         audio_list = model.generate(
             text=req.text,
             ref_audio=get_ref_audio(),
+            language=req.language,
         )
     except Exception as e:
         log.exception("OmniVoice generation failed")

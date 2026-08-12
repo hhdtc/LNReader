@@ -11,6 +11,7 @@ TTS_BASE = os.getenv("TTS_URL_BASE", "http://lnreader-tts:8765")
 class TTSRequest(BaseModel):
     text: str
     ref_audio_base64: str = ""  # ignored; ref audio is bundled in the TTS service
+    language: str = "zh"  # zh | en | ja
 
 
 @router.post("")
@@ -19,8 +20,8 @@ async def synthesize(req: TTSRequest):
         raise HTTPException(status_code=400, detail="Text cannot be empty")
 
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(f"{TTS_BASE}/tts", json={"text": req.text})
+        async with httpx.AsyncClient(timeout=600.0) as client:  # long on CPU TTS engines
+            resp = await client.post(f"{TTS_BASE}/tts", json={"text": req.text, "language": req.language})
 
         if resp.status_code != 200:
             raise HTTPException(status_code=502, detail=f"TTS service error: {resp.text}")

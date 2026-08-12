@@ -20,6 +20,7 @@ const DEFAULTS: UserSettings = {
   voicebox_profile_id: '',
   voicebox_language: 'en',
   voicebox_model_size: '1.7B',
+  tts_language: 'zh',
 };
 
 @Injectable({ providedIn: 'root' })

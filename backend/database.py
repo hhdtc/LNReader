@@ -64,6 +64,7 @@ class UserSettings(Base):
     voicebox_profile_id = Column(String(200), default="")
     voicebox_language = Column(String(10), default="en")
     voicebox_model_size = Column(String(20), default="1.7B")
+    tts_language = Column(String(10), default="zh")
 
 
 class BookAudioJob(Base):
@@ -134,6 +135,7 @@ _VOICEBOX_MIGRATIONS = [
     ("voicebox_profile_id", "ALTER TABLE user_settings ADD COLUMN voicebox_profile_id VARCHAR(200) DEFAULT ''"),
     ("voicebox_language", "ALTER TABLE user_settings ADD COLUMN voicebox_language VARCHAR(10) DEFAULT 'en'"),
     ("voicebox_model_size", "ALTER TABLE user_settings ADD COLUMN voicebox_model_size VARCHAR(20) DEFAULT '1.7B'"),
+    ("tts_language", "ALTER TABLE user_settings ADD COLUMN tts_language VARCHAR(10) DEFAULT 'zh'"),
 ]
 
 
