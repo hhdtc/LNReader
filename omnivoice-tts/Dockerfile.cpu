@@ -1,0 +1,28 @@
+# OmniVoice TTS server — CPU-only build (no NVIDIA GPU required).
+# Slower than the GPU container; use the base Dockerfile + `omnivoice-tts` for GPU.
+FROM python:3.11-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        libsndfile1 ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# CPU-only PyTorch first; the default PyPI wheel bundles CUDA.
+# `omnivoice` only requires torch>=2.4, so this satisfies it and pip keeps it.
+RUN pip install --no-cache-dir \
+        torch==2.8.0 torchaudio==2.8.0 \
+        --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir \
+        omnivoice soundfile fastapi "uvicorn[standard]"
+
+COPY server.py .
+COPY ref.wav .
+
+EXPOSE 8767
+
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8767"]

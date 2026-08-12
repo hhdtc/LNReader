@@ -7,6 +7,11 @@ services:
       - FRONTEND_URL=http://localhost
       - BOOKS_DIR=/app/books
       - DATABASE_URL=sqlite:////app/data/lnreader.db
+      # Active TTS engine (must match the uncommented container above):
+      #   OmniVoice (CPU): http://lnreader-omnivoice-tts-cpu:8767  (default)
+      #   OmniVoice (GPU): http://lnreader-omnivoice-tts:8765
+      #   IndexTTS-2.5:    http://lnreader-indextts-tts:8766
+      - TTS_URL_BASE=http://lnreader-omnivoice-tts-cpu:8767
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -34,15 +39,74 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  tts:
-    build: ./omnivoice-tts
-    container_name: lnreader-tts
-    runtime: nvidia
+  # ── TTS engines ─────────────────────────────────────────────────────────────
+  # TTS servers, one active at a time. Active engine is selected in the
+  # backend's TTS_URL_BASE env (below). Comment out the containers you are NOT
+  # using so only one TTS server runs.
+  #
+  # Default: OmniVoice (CPU) — `omnivoice-tts-cpu` active, GPU/IndexTTS commented.
+  #
+  # CPU option for IndexTTS-2.5 (slower synthesis):
+  #   indextts-tts:
+  #     build: ./indextts-tts
+  #     container_name: lnreader-indextts-tts
+  #     environment:
+  #       - INDEXTTS_DEVICE=cpu
+  #       - INDEXTTS_LANG=JA
+  #       - INDEXTTS_PORT=8766
+  #     ports:
+  #       - "8766:8766"
+  #     volumes:
+  #       - indextts_checkpoints:/app/checkpoints
+  #       - indextts_refaudio:/app/data
+  #     networks:
+  #       - app-net
+  #     restart: unless-stopped
+  #
+  # GPU option for IndexTTS-2.5 (much faster synthesis; requires nvidia-container-toolkit):
+  #   indextts-tts:
+  #     build: ./indextts-tts
+  #     container_name: lnreader-indextts-tts
+  #     runtime: nvidia
+  #     environment:
+  #       - NVIDIA_VISIBLE_DEVICES=all
+  #       - INDEXTTS_DEVICE=cuda:0
+  #       - INDEXTTS_LANG=JA
+  #       - INDEXTTS_PORT=8766
+  #     ports:
+  #       - "8766:8766"
+  #     volumes:
+  #       - indextts_checkpoints:/app/checkpoints
+  #       - indextts_refaudio:/app/data
+  #     networks:
+  #       - app-net
+  #     restart: unless-stopped
+
+  # omnivoice-tts:  # OmniVoice (GPU; requires nvidia-container-toolkit)
+  #   build: ./omnivoice-tts
+  #   container_name: lnreader-omnivoice-tts
+  #   runtime: nvidia
+  #   environment:
+  #     - NVIDIA_VISIBLE_DEVICES=all
+  #     - OMNIVOICE_DEVICE=cuda:0
+  #   ports:
+  #     - "8765:8765"
+  #   volumes:
+  #     - omnivoice_cache:/root/.cache/huggingface
+  #     - omnivoice_refaudio:/app/data
+  #   networks:
+  #     - app-net
+  #   restart: unless-stopped
+
+  omnivoice-tts-cpu:  # OmniVoice (CPU, no GPU required — slow; for machines without NVIDIA)
+    build:
+      context: ./omnivoice-tts
+      dockerfile: Dockerfile.cpu
+    container_name: lnreader-omnivoice-tts-cpu
     environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - OMNIVOICE_DEVICE=cuda:0
+      - OMNIVOICE_DEVICE=cpu
     ports:
-      - "8765:8765"
+      - "8767:8767"
     volumes:
       - omnivoice_cache:/root/.cache/huggingface
       - omnivoice_refaudio:/app/data
@@ -98,6 +162,8 @@ volumes:
   db_data:
   omnivoice_cache:
   omnivoice_refaudio:
+  indextts_checkpoints:
+  indextts_refaudio:
 
 networks:
   app-net:

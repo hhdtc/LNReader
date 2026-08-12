@@ -1,0 +1,5 @@
+# Server (FastAPI) deps for indextts-tts/server.py — model deps come from uv sync
+fastapi
+uvicorn[standard]
+soundfile
+python-multipart
