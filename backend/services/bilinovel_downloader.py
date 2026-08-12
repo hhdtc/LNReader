@@ -10,6 +10,7 @@ Ports the scraping logic of github.com/montaro2017/bili_novel_packer:
 - EPUB assembly (cover, volumes, images) compatible with LNReader's reader
 """
 import base64
+import logging
 import re
 import threading
 import time
@@ -18,6 +19,8 @@ from typing import Dict, List, Optional, Tuple
 
 from bs4 import BeautifulSoup
 from curl_cffi import requests as crequests
+
+logger = logging.getLogger(__name__)
 
 DOMAIN = "https://www.bilinovel.com"
 UA = (
@@ -42,6 +45,12 @@ _UNICODE_B = "\U0001d623"
 _NOVEL_ID_RE = re.compile(r"(?:linovelib|bilinovel)\.com/(?:novel|download)/(\d+)")
 _CHAPTER_ID_RE = re.compile(r"chapterid:'(\d+)'")
 _CHAPTERLOG_SRC_RE = re.compile(r'src="([^"]*chapterlog\.js[^"]*)"')
+
+
+def _chapterlog_version(url: str) -> str:
+    """Extract the ?v=... version string from a chapterlog.js URL."""
+    m = re.search(r"chapterlog\.js\?v=([\w.]+)", url)
+    return m.group(1) if m else "unknown"
 
 
 class BilinovelError(Exception):
@@ -194,22 +203,28 @@ class BilinovelDownloader:
     # ---------- chapter content ----------
 
     def fetch_chapter(self, url: str, volume_title: str) -> Tuple[str, str, List[str]]:
-        """Fetch a full chapter. Returns (title, cleaned_html, image_urls)."""
+        """Fetch a full chapter. Returns (title, cleaned_html, image_urls).
+
+        The site's chapterlog.js shuffles each page's paragraphs independently
+        (same chapterId seed, per-page DOM), so restore per page — mirroring
+        the packer — never across the concatenated chapter.
+        """
         page = self._fetch_page(url)
         title = page.title or ""
-        parts = [page.content]
-        image_urls = list(page.image_urls)
+        parts: List[str] = []
+        image_urls: List[str] = []
         chapter_id = page.chapter_id
         script_urls = list(page.script_urls)
-        while page.next_page_url:
-            page = self._fetch_page(page.next_page_url)
-            parts.append(page.content)
+        while True:
+            content = page.content
+            if chapter_id and script_urls:
+                content = self._restore_if_shuffled(content, chapter_id, script_urls[0])
+            parts.append(content)
             image_urls.extend(page.image_urls)
-
-        html = "".join(parts)
-        if chapter_id and script_urls:
-            html = self._restore_if_shuffled(html, chapter_id, script_urls[0])
-        return title, html, image_urls
+            if not page.next_page_url:
+                break
+            page = self._fetch_page(page.next_page_url)
+        return title, "".join(parts), image_urls
 
     def _restore_if_shuffled(self, html: str, chapter_id: int, script_url: str) -> str:
         template = self._get_template(script_url)
@@ -218,7 +233,11 @@ class BilinovelDownloader:
         params = template.params_for(chapter_id)
         soup = BeautifulSoup(html, "lxml")
         container = soup.new_tag("div")
-        for node in list(soup.contents):
+        # A content fragment parses as a full document (html/body wrapper), so
+        # operate on body contents — soup.contents is just [html] and the
+        # shuffle only moves direct <p> children.
+        body = soup.body or soup
+        for node in list(body.contents):
             container.append(node)
         self._restore_paragraphs(container, params)
         return "".join(str(c) for c in container.contents)
@@ -313,9 +332,23 @@ class BilinovelDownloader:
         full_url = script_url if script_url.startswith("http") else DOMAIN + script_url
         try:
             js = self._get(full_url)
-            template = _ShuffleTemplate.parse(js)
-        except Exception:
-            template = None
+        except Exception as exc:
+            # Transient fetch failure: warn instead of silently shipping
+            # shuffled paragraphs.
+            logger.warning(
+                "chapterlog.js fetch failed: %s (%s) — paragraphs will not be restored",
+                full_url, exc,
+            )
+            self._templates[script_url] = None
+            return None
+        template = _ShuffleTemplate.parse(js)
+        if template is None:
+            logger.warning(
+                "chapterlog.js template unparseable (version %s) — paragraphs will NOT "
+                "be restored. Anti-scrape likely changed; diff bili_novel_packer's "
+                "bili_novel_chapterlog.dart for the new template: %s",
+                _chapterlog_version(full_url), full_url,
+            )
         self._templates[script_url] = template
         return template
 
