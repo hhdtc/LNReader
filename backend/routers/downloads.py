@@ -74,6 +74,7 @@ def _register_epub(path: str) -> Book:
 
 def _run_download(job_id: int):
     db = SessionLocal()
+    dest_path = None
     try:
         job = db.query(BookDownloadJob).filter(BookDownloadJob.id == job_id).first()
         if not job:
@@ -163,6 +164,12 @@ def _run_download(job_id: int):
             job.error = str(e)[:500]
             job.completed_at = datetime.utcnow()
             db.commit()
+            # build_epub may have left a truncated file at dest_path.
+            if dest_path and os.path.exists(dest_path):
+                try:
+                    os.remove(dest_path)
+                except OSError:
+                    pass
     finally:
         _job_threads.pop(job_id, None)
         db.close()

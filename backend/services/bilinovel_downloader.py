@@ -494,7 +494,10 @@ def build_epub(
         if not group:
             continue
         if vol.title and len(volumes) > 1:
-            toc.append((vol.title, tuple(group)))
+            # TOC sections must be ebooklib Section objects — passing the
+            # plain string makes the NCX/nav writers call str.title (the
+            # uncalled method), crashing lxml during write_epub.
+            toc.append((epub.Section(vol.title), tuple(group)))
         else:
             toc.extend(group)
 
