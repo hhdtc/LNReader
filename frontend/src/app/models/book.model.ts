@@ -122,6 +122,7 @@ export interface SearchResponse {
   linovelib: LinovelibBook[];
   linovelib_total: number;
   linovelib_error: string | null;
+  linovelib_suggestion: string | null;
 }
 
 export interface DownloadJob {

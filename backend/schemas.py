@@ -189,6 +189,7 @@ class SearchResponse(BaseModel):
     linovelib: List[LinovelibBookResponse] = []
     linovelib_total: int = 0
     linovelib_error: Optional[str] = None
+    linovelib_suggestion: Optional[str] = None
 
 
 # --- Download schemas ---

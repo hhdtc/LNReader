@@ -26,11 +26,13 @@ def search_books(
     linovelib_books = []
     linovelib_total = 0
     linovelib_error = None
+    linovelib_suggestion = None
     if query:
         try:
             result = search_linovelib(query)
             linovelib_books = [LinovelibBookResponse(**b.__dict__) for b in result.books]
             linovelib_total = result.total
+            linovelib_suggestion = result.suggestion
         except LinovelibError as exc:
             linovelib_error = str(exc)
 
@@ -39,5 +41,6 @@ def search_books(
         local=local,
         linovelib=linovelib_books,
         linovelib_total=linovelib_total,
+        linovelib_suggestion=linovelib_suggestion,
         linovelib_error=linovelib_error,
     )

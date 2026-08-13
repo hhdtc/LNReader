@@ -144,6 +144,12 @@
         <!-- LINOVELIB -->
         <div class="results-section">
           <h3 class="results-label">LINOVELIB.COM ({{ res.linovelib_total }})</h3>
+          @if (res.linovelib_suggestion) {
+            <div class="suggestion-banner">
+              Did you mean <strong>{{ res.linovelib_suggestion }}</strong>?
+              Showing closest matches.
+            </div>
+          }
           @if (res.linovelib_error) {
             <div class="error-banner">
               <span class="error-icon">!</span>
