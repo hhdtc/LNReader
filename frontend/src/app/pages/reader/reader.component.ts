@@ -1,16 +1,16 @@
-import {
-  Component, OnInit, OnDestroy, signal,
+import { Component, OnInit, OnDestroy, signal,
   HostListener, ElementRef, ViewChild, ViewChildren, QueryList, computed, AfterViewChecked,
-  Injector, afterNextRender
-} from '@angular/core';
+  Injector, afterNextRender } from '@angular/core';
+import { toObservable } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Subscription } from 'rxjs';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { ApiService } from '../../services/api.service';
 import { SettingsService } from '../../services/settings.service';
 import { ChapterCacheService } from '../../services/chapter-cache.service';
-import { Book, ChapterContent, ChapterSummary } from '../../models/book.model';
+import { Book, ChapterContent, ChapterSummary, UserSettings } from '../../models/book.model';
 
 const BG_PRESETS = [
   { label: 'Dark', value: '#0b0b0b' },
@@ -67,6 +67,7 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
   pagesContent = signal<string[]>([]);
   private needsPageRecalc = false;
   private goToLastPageAfterRecalc = false;
+  private fontsRecalcDone = false;
 
   virtualBlocks: string[] = [];
   visibleStart = signal(0);
@@ -91,6 +92,7 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
   textColor = computed(() => this.isLight() ? '#1a1a1a' : '#f0f0f0');
 
   private saveTimer: any;
+  private settingsSub: Subscription | null = null;
 
   // TTS
   ttsMode = signal(false);
@@ -116,16 +118,12 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   ngOnInit() {
     this.bookId = Number(this.route.snapshot.paramMap.get('id'));
-    const s = this.settings.settings();
-    this.bgColor.set(s.bg_color || '#0b0b0b');
-    this.fontSize.set(s.font_size || 18);
-    this.fontFamily.set(s.font_family || 'Space Grotesk');
-    const pw = s.page_width || 720;
-    this.pageWidthPct.set(pw <= 100 ? pw : 75);
-    if (s.view_mode === 'paginate') {
-      this.viewMode.set('paginate');
-      this.needsPageRecalc = true;
-    }
+
+    // Settings arrive asynchronously (SettingsService.load() fires on app
+    // bootstrap). Applying them once here reads stale defaults on a hard
+    // refresh, so subscribe and re-apply whenever the server state lands.
+    this.settingsSub = toObservable(this.settings.settings, { injector: this.injector })
+      .subscribe((s) => this.applyDisplaySettings(s));
 
     this.api.getBook(this.bookId).subscribe({ next: (b) => this.book.set(b) });
     this.loadChapterIndex();
@@ -140,7 +138,39 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
     });
   }
 
+  /**
+   * Apply display preferences from settings onto the reader. Only triggers a
+   * relayout when a value actually changed, so the user's own in-reader
+   * adjustments (which are echoed back through the same signal) never cause
+   * redundant recalcs.
+   */
+  private applyDisplaySettings(s: UserSettings): void {
+    const nextBg = s.bg_color || '#0b0b0b';
+    const nextFontSize = s.font_size || 18;
+    const nextFontFamily = s.font_family || 'Space Grotesk';
+    const nextWidth = s.page_width != null && s.page_width <= 100 ? s.page_width : 75;
+
+    let changed = false;
+    if (this.bgColor() !== nextBg) { this.bgColor.set(nextBg); changed = true; }
+    if (this.fontSize() !== nextFontSize) { this.fontSize.set(nextFontSize); changed = true; }
+    if (this.fontFamily() !== nextFontFamily) { this.fontFamily.set(nextFontFamily); changed = true; }
+    if (this.pageWidthPct() !== nextWidth) { this.pageWidthPct.set(nextWidth); changed = true; }
+    if (s.view_mode === 'paginate' && this.viewMode() !== 'paginate') {
+      this.viewMode.set('paginate');
+      changed = true;
+    }
+
+    if (changed && this.chapter()) {
+      if (this.viewMode() === 'paginate') {
+        this.needsPageRecalc = true;
+      } else {
+        this.refreshScrollVirtualizationLayout();
+      }
+    }
+  }
+
   ngOnDestroy() {
+    if (this.settingsSub) { this.settingsSub.unsubscribe(); this.settingsSub = null; }
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.saveProgress();
     this.chapterCache.clear();
@@ -189,6 +219,7 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.rememberChapterSummary(index, c.chapter_title);
     this.currentPage.set(0);
     this.needsPageRecalc = true;
+    this.fontsRecalcDone = false;
 
     if (this.viewMode() === 'scroll') {
       this.initScrollVirtualization(c.content);
@@ -510,23 +541,30 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
     if (!this.viewportRef || !this.chapter()) return;
     const viewport = this.viewportRef.nativeElement as HTMLDivElement;
     const vpHeight = viewport.clientHeight;
+    const vpWidth = viewport.clientWidth;
     if (vpHeight <= 0) return;
 
     const content =
       this.ttsMode() && this.ttsContent() ? this.ttsContent() : this.chapter()!.content;
 
-    // Hidden measurer with same styles as reading area
+    // Hidden measurer with same styles as reading area. Its content width must
+    // match the real article: article width = pct% of the viewport, then minus
+    // the 24px side padding (border-box). Using the viewport's clientWidth
+    // keeps this exact (scrollbar width, container padding included).
+    // It is appended INSIDE the viewport (a host descendant) so the
+    // component's ::ng-deep rules (p margins, heading margins, img display)
+    // apply to its content just like they do to the real article.
     const measurer = document.createElement('div');
-    const pxWidth = Math.round(window.innerWidth * this.pageWidthPct() / 100);
+    const pxWidth = Math.max(320, Math.round(vpWidth * this.pageWidthPct() / 100));
     measurer.style.cssText = `
-      position:absolute; visibility:hidden; z-index:-1;
+      position:absolute; visibility:hidden; z-index:-1; pointer-events:none;
       width:${pxWidth}px; max-width:${pxWidth}px;
       font-size:${this.fontSize()}px;
       font-family:${this.fontFamily()}, Georgia, serif;
       line-height:${this.lineHeight()};
       padding:40px 24px; box-sizing:border-box;
     `;
-    document.body.appendChild(measurer);
+    viewport.appendChild(measurer);
 
     // Parse chapter HTML into top-level nodes
     const temp = document.createElement('div');
@@ -562,7 +600,7 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
       pages.push(nodesToHtml(pageNodes));
     }
 
-    document.body.removeChild(measurer);
+    viewport.removeChild(measurer);
 
     if (pages.length === 0) pages.push(content);
 
@@ -588,6 +626,16 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
       this.currentPage.set(pages.length - 1);
     } else if (this.currentPage() >= pages.length) {
       this.currentPage.set(pages.length - 1);
+    }
+
+    // The first measurement may run before the webfont finished loading, so
+    // line metrics (and page breaks) can be off. Re-paginate once the fonts
+    // settle; the flag is reset per chapter to avoid re-triggering loops.
+    if (!this.fontsRecalcDone && document.fonts?.ready) {
+      this.fontsRecalcDone = true;
+      document.fonts.ready.then(() => {
+        if (this.viewMode() === 'paginate') this.recalcPages();
+      }).catch(() => {});
     }
   }
 

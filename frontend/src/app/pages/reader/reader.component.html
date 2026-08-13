@@ -238,7 +238,7 @@
 
       @if (viewMode() === 'paginate') {
         <!-- PAGINATED VIEW -->
-        <div class="paginate-container" [style.max-width]="pageWidthPct() + '%'">
+        <div class="paginate-container">
           <div class="paginate-viewport" #viewportRef>
             @if (pagesContent().length > 0) {
               <article

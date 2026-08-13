@@ -1,11 +1,24 @@
-import { Component, OnInit, OnDestroy, signal } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal, computed } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { forkJoin, of, interval, Subscription } from 'rxjs';
-import { catchError, switchMap, filter } from 'rxjs/operators';
+import { catchError, switchMap } from 'rxjs/operators';
 import { ApiService } from '../../services/api.service';
 import { AuthService } from '../../services/auth.service';
 import { Book, AudioJobStatus, SearchResponse, LinovelibBook, DownloadJob } from '../../models/book.model';
+
+/** One entry shown in the task center (downloads + audio generation). */
+interface TaskItem {
+  id: string;
+  kind: 'download' | 'audio';
+  title: string;
+  status: string; // running / done / failed / cancelled
+  progress: number; // 0..1
+  detail: string;
+  error?: string;
+  bookId?: number;
+  job?: DownloadJob;
+}
 
 @Component({
   selector: 'app-library',
@@ -26,6 +39,54 @@ export class LibraryComponent implements OnInit, OnDestroy {
   searchResults = signal<SearchResponse | null>(null);
   downloadJobs = signal<Map<string, DownloadJob>>(new Map());
   downloadStarting = signal<Set<string>>(new Set());
+
+  // Task center (bottom-right)
+  taskCenterOpen = signal(false);
+  private dismissedAudio = signal<Set<number>>(new Set());
+
+  tasks = computed<TaskItem[]>(() => {
+    const items: TaskItem[] = [];
+
+    // Bilinovel download jobs
+    for (const job of this.downloadJobs().values()) {
+      const total = job.total_chapters || 0;
+      items.push({
+        id: `dl-${job.id}`,
+        kind: 'download',
+        title: job.title || `Novel #${job.novel_id}`,
+        status: job.status,
+        progress: total ? job.chapters_done / total : 0,
+        detail: total ? `${job.chapters_done} / ${total} CH` : 'Fetching catalog...',
+        error: job.error ?? undefined,
+        bookId: job.book_id ?? undefined,
+        job,
+      });
+    }
+
+    // Voicebox chapter-audio jobs (skip idle books and dismissed entries)
+    const dismissed = this.dismissedAudio();
+    const titleById = new Map(this.books().map(b => [b.id, b.title] as const));
+    for (const [bookId, st] of this.audioJobs().entries()) {
+      if (st.status === 'idle' || dismissed.has(bookId)) continue;
+      const total = st.total_chapters || 0;
+      items.push({
+        id: `au-${bookId}`,
+        kind: 'audio',
+        title: titleById.get(bookId) || `Book #${bookId}`,
+        status: st.status,
+        progress: total ? st.chapters_done / total : 0,
+        detail: total ? `${st.chapters_done} / ${total} CH` : '',
+        error: st.error,
+        bookId,
+      });
+    }
+
+    return items;
+  });
+
+  runningCount = computed(() =>
+    this.tasks().filter(t => t.status === 'running').length
+  );
 
   private pollInterval: ReturnType<typeof setInterval> | null = null;
   private searchDebounce: ReturnType<typeof setTimeout> | null = null;
@@ -116,23 +177,27 @@ export class LibraryComponent implements OnInit, OnDestroy {
 
   downloadNovel(book: LinovelibBook, event: MouseEvent) {
     event.stopPropagation();
+    this.startDownloadForUrl(book.url);
+  }
+
+  private startDownloadForUrl(url: string) {
     const starting = new Set(this.downloadStarting());
-    starting.add(book.url);
+    starting.add(url);
     this.downloadStarting.set(starting);
 
-    this.api.startDownload(book.url).subscribe({
+    this.api.startDownload(url).subscribe({
       next: (job) => {
         const starting2 = new Set(this.downloadStarting());
-        starting2.delete(book.url);
+        starting2.delete(url);
         this.downloadStarting.set(starting2);
         const map = new Map(this.downloadJobs());
-        map.set(book.url, job);
+        map.set(url, job);
         this.downloadJobs.set(map);
         this.startDownloadPolling();
       },
       error: (err) => {
         const starting2 = new Set(this.downloadStarting());
-        starting2.delete(book.url);
+        starting2.delete(url);
         this.downloadStarting.set(starting2);
         this.error.set(err?.error?.detail ?? 'Failed to start download');
         setTimeout(() => this.error.set(''), 4000);
@@ -187,11 +252,15 @@ export class LibraryComponent implements OnInit, OnDestroy {
   cancelJob(book: LinovelibBook, event: MouseEvent) {
     event.stopPropagation();
     const job = this.getDownloadJob(book);
+    if (job) this.cancelDownloadJob(job);
+  }
+
+  cancelDownloadJob(job: DownloadJob) {
     if (!job || job.status !== 'running') return;
     this.api.cancelDownload(job.id).subscribe({
       next: (updated) => {
         const map = new Map(this.downloadJobs());
-        map.set(book.url, updated);
+        map.set(job.novel_url, updated);
         this.downloadJobs.set(map);
       },
       error: () => {}
@@ -250,6 +319,10 @@ export class LibraryComponent implements OnInit, OnDestroy {
 
   generateAudio(book: Book, event: MouseEvent) {
     event.stopPropagation();
+    this.startAudioGeneration(book);
+  }
+
+  private startAudioGeneration(book: Book) {
     const ids = new Set(this.generatingIds());
     ids.add(book.id);
     this.generatingIds.set(ids);
@@ -262,6 +335,10 @@ export class LibraryComponent implements OnInit, OnDestroy {
         const ids2 = new Set(this.generatingIds());
         ids2.delete(book.id);
         this.generatingIds.set(ids2);
+        // Re-show the task in the center if it had been dismissed earlier.
+        const dismissed = new Set(this.dismissedAudio());
+        dismissed.delete(book.id);
+        this.dismissedAudio.set(dismissed);
         this.startPollingIfNeeded();
       },
       error: (err) => {
@@ -276,10 +353,14 @@ export class LibraryComponent implements OnInit, OnDestroy {
 
   stopGeneration(book: Book, event: MouseEvent) {
     event.stopPropagation();
-    this.api.cancelAudioGeneration(book.id).subscribe({
+    this.cancelAudioTask(book.id);
+  }
+
+  cancelAudioTask(bookId: number) {
+    this.api.cancelAudioGeneration(bookId).subscribe({
       next: (job) => {
         const map = new Map(this.audioJobs());
-        map.set(book.id, job);
+        map.set(bookId, job);
         this.audioJobs.set(map);
         this.startPollingIfNeeded();
       },
@@ -375,5 +456,67 @@ export class LibraryComponent implements OnInit, OnDestroy {
 
   formatProgress(job: AudioJobStatus): string {
     return `${job.chapters_done} / ${job.total_chapters} CH`;
+  }
+
+  // ---------- Task center ----------
+
+  toggleTaskCenter() {
+    this.taskCenterOpen.update(v => !v);
+  }
+
+  statusLabel(status: string): string {
+    switch (status) {
+      case 'running': return 'RUNNING';
+      case 'done': return 'DONE';
+      case 'failed': return 'FAILED';
+      case 'cancelled': return 'CANCELLED';
+      default: return status.toUpperCase();
+    }
+  }
+
+  retryLabel(task: TaskItem): string {
+    return task.kind === 'audio' && task.status === 'cancelled' ? 'RESUME' : 'RETRY';
+  }
+
+  cancelTask(task: TaskItem) {
+    if (task.kind === 'download' && task.job) {
+      this.cancelDownloadJob(task.job);
+    } else if (task.kind === 'audio' && task.bookId != null) {
+      this.cancelAudioTask(task.bookId);
+    }
+  }
+
+  retryTask(task: TaskItem) {
+    if (task.kind === 'download' && task.job) {
+      this.startDownloadForUrl(task.job.novel_url);
+    } else if (task.kind === 'audio' && task.bookId != null) {
+      const book = this.books().find(b => b.id === task.bookId);
+      if (book) this.startAudioGeneration(book);
+    }
+  }
+
+  dismissTask(task: TaskItem) {
+    if (task.kind === 'download') {
+      if (task.job) {
+        const map = new Map(this.downloadJobs());
+        map.delete(task.job.novel_url);
+        this.downloadJobs.set(map);
+      }
+    } else if (task.kind === 'audio' && task.bookId != null) {
+      // Keep the entry in audioJobs (book card still shows its state),
+      // but hide it from the task center.
+      const dismissed = new Set(this.dismissedAudio());
+      dismissed.add(task.bookId);
+      this.dismissedAudio.set(dismissed);
+    }
+  }
+
+  openTaskBook(task: TaskItem) {
+    if (task.bookId == null) return;
+    if (task.kind === 'download') {
+      this.router.navigate(['/reader', task.bookId]);
+    } else {
+      this.router.navigate(['/listen', task.bookId]);
+    }
   }
 }
