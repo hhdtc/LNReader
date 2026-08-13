@@ -49,8 +49,8 @@
 - 在设置中配置服务商与 API 密钥
 
 ### 🔊 TTS 音频（OmniVoice / IndexTTS-2.5）
-- 使用本地运行的 TTS 服务器逐章生成音频——默认 [OmniVoice](https://github.com/k2-fsa/OmniVoice)（CPU 容器，无需 GPU），也可选择 [IndexTTS-2.5](https://github.com/index-tts/index-tts)（零样本声音克隆，支持中/英/日/西/阿）
-- TTS 容器定义在 `docker-compose.yml` 中（默认启用 `omnivoice-tts-cpu`；备选 `omnivoice-tts` GPU 版与 `indextts-tts`）；切换引擎时注释掉不用的容器，并在后端服务上设置 `TTS_URL_BASE`
+- 使用本地运行的 TTS 服务器逐章生成音频——默认 [OmniVoice](https://github.com/k2-fsa/OmniVoice)（GPU 容器，需要 NVIDIA GPU），也可选择 [IndexTTS-2.5](https://github.com/index-tts/index-tts)（零样本声音克隆，支持中/英/日/西/阿）
+- TTS 容器定义在 `docker-compose.yml` 中（默认启用 `omnivoice-tts` GPU 版；备选 `omnivoice-tts-cpu` 与 `indextts-tts`）；切换引擎时注释掉不用的容器，并在后端服务上设置 `TTS_URL_BASE`
 - 后台生成——书库卡片上逐章显示进度
 - 专属 **听书** 页面（`/listen/:id`）：
   - 播放/暂停、进度条、倍速控制
@@ -114,7 +114,7 @@ open http://localhost:8080
 | `BOOKS_DIR` | 否 | `/app/books` | 容器内 EPUB 存储路径 |
 | `AUDIO_DIR` | 否 | `/app/audio` | 容器内生成 WAV 文件的路径 |
 | `DATABASE_URL` | 否 | `sqlite:////app/data/lnreader.db` | SQLAlchemy 数据库地址 |
-| `TTS_URL_BASE` | 否 | `http://lnreader-omnivoice-tts-cpu:8767` | TTS 服务器地址（在 `docker-compose.yml` 中设置；OmniVoice GPU 为 `http://lnreader-omnivoice-tts:8765`，IndexTTS-2.5 为 `http://lnreader-indextts-tts:8766`） |
+| `TTS_URL_BASE` | 否 | `http://lnreader-omnivoice-tts:8765` | TTS 服务器地址（在 `docker-compose.yml` 中设置；OmniVoice CPU 为 `http://lnreader-omnivoice-tts-cpu:8767`，IndexTTS-2.5 为 `http://lnreader-indextts-tts:8766`） |
 
 **本地开发最小 `.env`（不使用 Google OAuth）：**
 ```env
@@ -129,9 +129,9 @@ JWT_SECRET=change-me-to-a-random-string
 |---|---|---|
 | `lnreader-frontend` | **8080** | nginx 托管的 Angular 应用 |
 | `lnreader-backend` | 内部 | FastAPI——仅可通过 nginx 反代访问 |
-| `lnreader-omnivoice-tts-cpu` | **8767** | OmniVoice TTS API（CPU，无需 GPU） |
-| `lnreader-omnivoice-tts` | **8765** | OmniVoice TTS API（GPU）——默认注释 |
-| `lnreader-indextts-tts` | **8766** | IndexTTS-2.5 TTS API——默认注释（CPU 或 GPU 可选） |
+| `lnreader-omnivoice-tts` | 内部 | OmniVoice TTS API（GPU，需 NVIDIA GPU + nvidia-container-toolkit）——仅后端经 `app-net` 访问 |
+| `lnreader-omnivoice-tts-cpu` | 内部 | OmniVoice TTS API（CPU，无需 GPU）——默认注释 |
+| `lnreader-indextts-tts` | 内部 | IndexTTS-2.5 TTS API——默认注释（CPU 或 GPU 可选） |
 
 ---
 

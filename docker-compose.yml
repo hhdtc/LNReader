@@ -7,11 +7,11 @@ services:
       - FRONTEND_URL=http://localhost
       - BOOKS_DIR=/app/books
       - DATABASE_URL=sqlite:////app/data/lnreader.db
-      # Active TTS engine (must match the uncommented container above):
-      #   OmniVoice (CPU): http://lnreader-omnivoice-tts-cpu:8767  (default)
-      #   OmniVoice (GPU): http://lnreader-omnivoice-tts:8765
+      # Active TTS engine (must match the uncommented container below):
+      #   OmniVoice (GPU): http://lnreader-omnivoice-tts:8765  (default)
+      #   OmniVoice (CPU): http://lnreader-omnivoice-tts-cpu:8767
       #   IndexTTS-2.5:    http://lnreader-indextts-tts:8766
-      - TTS_URL_BASE=http://lnreader-omnivoice-tts-cpu:8767
+      - TTS_URL_BASE=http://lnreader-omnivoice-tts:8765
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -31,7 +31,7 @@ services:
     build: ./frontend
     container_name: lnreader-frontend
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:80"
     networks:
       - app-net
     depends_on:
@@ -44,7 +44,7 @@ services:
   # backend's TTS_URL_BASE env (below). Comment out the containers you are NOT
   # using so only one TTS server runs.
   #
-  # Default: OmniVoice (CPU) — `omnivoice-tts-cpu` active, GPU/IndexTTS commented.
+  # Default: OmniVoice (GPU) — `omnivoice-tts` active, CPU/IndexTTS commented.
   #
   # CPU option for IndexTTS-2.5 (slower synthesis):
   #   indextts-tts:
@@ -54,8 +54,6 @@ services:
   #       - INDEXTTS_DEVICE=cpu
   #       - INDEXTTS_LANG=JA
   #       - INDEXTTS_PORT=8766
-  #     ports:
-  #       - "8766:8766"
   #     volumes:
   #       - indextts_checkpoints:/app/checkpoints
   #       - indextts_refaudio:/app/data
@@ -73,8 +71,6 @@ services:
   #       - INDEXTTS_DEVICE=cuda:0
   #       - INDEXTTS_LANG=JA
   #       - INDEXTTS_PORT=8766
-  #     ports:
-  #       - "8766:8766"
   #     volumes:
   #       - indextts_checkpoints:/app/checkpoints
   #       - indextts_refaudio:/app/data
@@ -82,37 +78,33 @@ services:
   #       - app-net
   #     restart: unless-stopped
 
-  # omnivoice-tts:  # OmniVoice (GPU; requires nvidia-container-toolkit)
-  #   build: ./omnivoice-tts
-  #   container_name: lnreader-omnivoice-tts
-  #   runtime: nvidia
-  #   environment:
-  #     - NVIDIA_VISIBLE_DEVICES=all
-  #     - OMNIVOICE_DEVICE=cuda:0
-  #   ports:
-  #     - "8765:8765"
-  #   volumes:
-  #     - omnivoice_cache:/root/.cache/huggingface
-  #     - omnivoice_refaudio:/app/data
-  #   networks:
-  #     - app-net
-  #   restart: unless-stopped
-
-  omnivoice-tts-cpu:  # OmniVoice (CPU, no GPU required — slow; for machines without NVIDIA)
-    build:
-      context: ./omnivoice-tts
-      dockerfile: Dockerfile.cpu
-    container_name: lnreader-omnivoice-tts-cpu
+  omnivoice-tts:  # OmniVoice (GPU; requires nvidia-container-toolkit)
+    build: ./omnivoice-tts
+    container_name: lnreader-omnivoice-tts
+    runtime: nvidia
     environment:
-      - OMNIVOICE_DEVICE=cpu
-    ports:
-      - "8767:8767"
+      - NVIDIA_VISIBLE_DEVICES=all
+      - OMNIVOICE_DEVICE=cuda:0
     volumes:
       - omnivoice_cache:/root/.cache/huggingface
       - omnivoice_refaudio:/app/data
     networks:
       - app-net
     restart: unless-stopped
+
+  # omnivoice-tts-cpu:  # OmniVoice (CPU, no GPU required — slow; for machines without NVIDIA)
+  #   build:
+  #     context: ./omnivoice-tts
+  #     dockerfile: Dockerfile.cpu
+  #   container_name: lnreader-omnivoice-tts-cpu
+  #   environment:
+  #     - OMNIVOICE_DEVICE=cpu
+  #   volumes:
+  #     - omnivoice_cache:/root/.cache/huggingface
+  #     - omnivoice_refaudio:/app/data
+  #   networks:
+  #     - app-net
+  #   restart: unless-stopped
 
   # tts:
   #   image: xxxxrt666/gpt-sovits:latest-cu128
@@ -121,9 +113,6 @@ services:
   #   environment:
   #     - NVIDIA_VISIBLE_DEVICES=all
   #     - LD_LIBRARY_PATH=/root/conda/lib:/root/conda/lib/python3.12/site-packages/nvidia/cublas/lib:/root/conda/lib/python3.12/site-packages/nvidia/cudnn/lib
-  #   ports:
-  #     - "9874:9874"  # WebUI control panel
-  #     - "9880:9880"  # API server
   #   volumes:
   #     - ./tts_custom_models:/workspace/GPT-SoVITS/custom_models
   #     - ./tts_pretrained_models:/workspace/GPT-SoVITS/GPT_SoVITS/pretrained_models
@@ -148,8 +137,6 @@ services:
   #     - NVIDIA_VISIBLE_DEVICES=all
   #     - HF_HUB_OFFLINE=1
   #     - TRANSFORMERS_OFFLINE=1
-  #   ports:
-  #     - "7860:7860"  # WebUI / API server
   #   volumes:
   #     - ./qwen-tts/models:/models
   #     - ./qwen-tts/outputs:/app/outputs
