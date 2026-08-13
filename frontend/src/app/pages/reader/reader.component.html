@@ -228,7 +228,7 @@
   }
 
   <!-- CHAPTER CONTENT -->
-  <div class="reader-scroll" [class.paginate-mode]="viewMode() === 'paginate' && !ttsMode()">
+  <div class="reader-scroll" [class.paginate-mode]="viewMode() === 'paginate'">
     @if (loading()) {
       <div class="chapter-loading">
         <div class="loading-spinner"></div>
@@ -236,26 +236,7 @@
       </div>
     } @else if (chapter()) {
 
-      @if (ttsMode()) {
-        <!-- TTS SENTENCES VIEW -->
-        <div
-          class="tts-container"
-          [class.light]="isLight()"
-          [style.max-width]="pageWidthPct() + '%'"
-          [style.font-size.px]="fontSize()"
-          [style.font-family]="fontFamily() + ', Georgia, serif'"
-          [style.line-height]="lineHeight()">
-          @for (sentence of ttsSentences(); track $index; let i = $index) {
-            <span
-              class="tts-sentence"
-              [class.tts-active]="i === ttsCurrentIdx()"
-              [class.tts-played]="i < ttsCurrentIdx()"
-              [attr.data-tts-idx]="i"
-              (click)="onTtsSentenceClick(i)">{{ sentence }}</span>
-          }
-        </div>
-
-      } @else if (viewMode() === 'paginate') {
+      @if (viewMode() === 'paginate') {
         <!-- PAGINATED VIEW -->
         <div class="paginate-container" [style.max-width]="pageWidthPct() + '%'">
           <div class="paginate-viewport" #viewportRef>
@@ -266,6 +247,7 @@
                 [style.font-family]="fontFamily() + ', Georgia, serif'"
                 [style.line-height]="lineHeight()"
                 [style.max-width]="pageWidthPct() + '%'"
+                (click)="onTtsContentClick($event)"
                 [innerHTML]="sanitizeContent(pagesContent()[currentPage()])">
               </article>
             }
@@ -273,6 +255,17 @@
 
           <!-- PAGE NAV removed; navigation via arrow keys -->
         </div>
+      } @else if (ttsMode()) {
+        <!-- SCROLL VIEW DURING TTS: same layout, sentences highlighted in place -->
+        <article
+          class="chapter-content"
+          [style.max-width]="pageWidthPct() + '%'"
+          [style.font-size.px]="fontSize()"
+          [style.font-family]="fontFamily() + ', Georgia, serif'"
+          [style.line-height]="lineHeight()"
+          (click)="onTtsContentClick($event)"
+          [innerHTML]="sanitizeContent(ttsContent())">
+        </article>
       } @else {
         <!-- SCROLL VIEW -->
         <article

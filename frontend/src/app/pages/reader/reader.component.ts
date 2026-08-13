@@ -95,12 +95,14 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
   // TTS
   ttsMode = signal(false);
   ttsSentences = signal<string[]>([]);
+  ttsContent = signal('');
   ttsCurrentIdx = signal(-1);
   ttsPlaying = signal(false);
   private ttsAudioCache = new Map<number, string>(); // idx -> base64
   private ttsFetchingSet = new Set<number>();
   private ttsAudioElement: HTMLAudioElement | null = null;
   private ttsRefAudioB64 = '';
+  private ttsPageRanges: Array<[number, number]> = [];
 
   constructor(
     private route: ActivatedRoute,
@@ -271,9 +273,18 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
       });
     }
   }
+  // Stable SafeHtml per content string: bypassSecurityTrustHtml returns a new
+  // object each call, which would make Angular re-set innerHTML on every CD
+  // cycle and wipe imperatively-applied classes (TTS highlight).
+  private safeHtmlCache: Record<string, SafeHtml> = {};
 
   sanitizeContent(html: string): SafeHtml {
-    return this.sanitizer.bypassSecurityTrustHtml(html);
+    let safe = this.safeHtmlCache[html];
+    if (!safe) {
+      safe = this.sanitizer.bypassSecurityTrustHtml(html);
+      this.safeHtmlCache[html] = safe;
+    }
+    return safe;
   }
 
   prevChapter() {
@@ -501,7 +512,8 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
     const vpHeight = viewport.clientHeight;
     if (vpHeight <= 0) return;
 
-    const content = this.chapter()!.content;
+    const content =
+      this.ttsMode() && this.ttsContent() ? this.ttsContent() : this.chapter()!.content;
 
     // Hidden measurer with same styles as reading area
     const measurer = document.createElement('div');
@@ -555,6 +567,17 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
     if (pages.length === 0) pages.push(content);
 
     this.pagesContent.set(pages);
+    this.ttsPageRanges = this.ttsMode()
+      ? pages.map((html) => {
+          const d = document.createElement('div');
+          d.innerHTML = html;
+          const idxs = Array.from(d.querySelectorAll('[data-tts-idx]'))
+            .map((el) => Number(el.getAttribute('data-tts-idx')))
+            .filter((n) => !Number.isNaN(n));
+          if (idxs.length === 0) return [-1, -1] as [number, number];
+          return [Math.min(...idxs), Math.max(...idxs)] as [number, number];
+        })
+      : [];
     this.totalPages.set(pages.length);
     if (this.pendingPageRestore >= 0) {
       const target = Math.min(this.pendingPageRestore, pages.length - 1);
@@ -743,14 +766,19 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
   private startTTS(): void {
     const content = this.chapter()?.content;
     if (!content) return;
-    const sentences = this.extractSentences(content);
-    if (sentences.length === 0) return;
+    const wrapped = this.wrapContentForTts(content);
+    if (!wrapped) return;
     this.ttsAudioCache.clear();
     this.ttsFetchingSet.clear();
-    this.ttsSentences.set(sentences);
+    this.ttsSentences.set(wrapped.sentences);
+    this.ttsContent.set(wrapped.html);
     this.ttsMode.set(true);
     this.ttsCurrentIdx.set(0);
     this.ttsPlaying.set(true);
+    if (this.viewMode() === 'paginate') {
+      this.needsPageRecalc = true;
+    }
+
 
     const doStart = () => {
       this.bufferAhead(0);
@@ -782,11 +810,16 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
       this.ttsAudioElement.pause();
       this.ttsAudioElement = null;
     }
-    this.ttsAudioCache.clear();
-    this.ttsFetchingSet.clear();
     this.ttsMode.set(false);
+    this.ttsContent.set('');
+    this.ttsSentences.set([]);
     this.ttsCurrentIdx.set(-1);
     this.ttsPlaying.set(false);
+    this.clearTtsHighlight();
+    if (this.viewMode() === 'paginate') {
+      this.needsPageRecalc = true;
+    }
+
   }
 
   onTtsSentenceClick(idx: number): void {
@@ -797,6 +830,7 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
     }
     this.ttsCurrentIdx.set(idx);
     this.ttsPlaying.set(true);
+    this.refreshTtsHighlight();
     this.bufferAhead(idx);
     this.fetchAndPlay(idx);
   }
@@ -862,6 +896,7 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
       this.ttsAudioElement = null;
       this.advanceToNext(idx);
     });
+    this.refreshTtsHighlight();
     this.scrollToTtsSentence(idx);
   }
 
@@ -878,6 +913,15 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
   }
 
   private scrollToTtsSentence(idx: number): void {
+    if (this.viewMode() === 'paginate') {
+      const page = this.findTtsPage(idx);
+      if (page >= 0 && page !== this.currentPage()) {
+        this.currentPage.set(page);
+        this.scheduleSave();
+      }
+      setTimeout(() => this.refreshTtsHighlight(), 0);
+      return;
+    }
     setTimeout(() => {
       const el = document.querySelector(`[data-tts-idx="${idx}"]`);
       el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -894,18 +938,83 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
       .trim();
   }
 
-  private extractSentences(html: string): string[] {
+  onTtsContentClick(event: MouseEvent): void {
+    if (!this.ttsMode()) return;
+    const target = event.target as HTMLElement;
+    const el = target.closest ? (target.closest('[data-tts-idx]') as HTMLElement | null) : null;
+    if (!el) return;
+    const idx = Number(el.getAttribute('data-tts-idx'));
+    if (!Number.isNaN(idx)) this.onTtsSentenceClick(idx);
+  }
+
+  private refreshTtsHighlight(): void {
+    this.clearTtsHighlight();
+    if (!this.ttsMode()) return;
+    const idx = this.ttsCurrentIdx();
+    if (idx < 0) return;
+    document.querySelector(`[data-tts-idx="${idx}"]`)?.classList.add('tts-active');
+  }
+
+  private clearTtsHighlight(): void {
+    document
+      .querySelectorAll('.tts-s.tts-active')
+      .forEach((el) => el.classList.remove('tts-active'));
+  }
+
+  private findTtsPage(idx: number): number {
+    for (let i = 0; i < this.ttsPageRanges.length; i++) {
+      const [min, max] = this.ttsPageRanges[i];
+      if (min <= idx && idx <= max) return i;
+    }
+    return -1;
+  }
+
+  private wrapContentForTts(content: string): { html: string; sentences: string[] } | null {
+    // Wrap each sentence in the chapter HTML with a span carrying a
+    // data-tts-idx, so the original layout is preserved and TTS can
+    // highlight/scroll in place. Furigana (rt) text is skipped: TTS
+    // should read the surface characters, not the reading annotation.
     const temp = document.createElement('div');
-    temp.innerHTML = html;
-    const text = (temp.textContent || '').trim();
-    if (!text) return [];
+    temp.innerHTML = content;
 
-    // Split after Japanese terminators or English terminators followed by whitespace
-    const parts = text.split(/(?<=[。！？])|(?<=[.!?])\s+/)
-      .map(s => s.trim())
-      .filter(s => s.length > 1);
+    const sentences: string[] = [];
+    const walker = document.createTreeWalker(temp, NodeFilter.SHOW_TEXT, {
+      acceptNode: (node) => {
+        const parent = node.parentElement;
+        if (!parent || parent.closest('script, style, rt')) return NodeFilter.FILTER_REJECT;
+        return (node.textContent || '').trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+      },
+    });
 
-    return parts;
+    const textNodes: Text[] = [];
+    let node: Node | null;
+    while ((node = walker.nextNode())) {
+      textNodes.push(node as Text);
+    }
+
+    let idx = 0;
+    for (const textNode of textNodes) {
+      const parts = (textNode.textContent || '')
+        .split(/(?<=[。！？])|(?<=[.!?])\s+/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 1);
+      if (parts.length === 0) continue;
+
+      const frag = document.createDocumentFragment();
+      for (const part of parts) {
+        const span = document.createElement('span');
+        span.className = 'tts-s';
+        span.setAttribute('data-tts-idx', String(idx));
+        span.textContent = part;
+        frag.appendChild(span);
+        sentences.push(part);
+        idx++;
+      }
+      textNode.parentNode?.replaceChild(frag, textNode);
+    }
+
+    if (sentences.length === 0) return null;
+    return { html: temp.innerHTML, sentences };
   }
 
   get progress(): number {

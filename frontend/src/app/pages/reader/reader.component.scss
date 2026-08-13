@@ -744,6 +744,25 @@ $panel-border-light: rgba(0, 0, 0, 0.12);
     border-bottom: 1px dotted rgba(200,182,255,0.3);
   }
 
+  // TTS sentence highlighting — spans are inserted via [innerHTML], so
+  // these must live under ::ng-deep to escape view encapsulation.
+  .tts-s {
+    cursor: pointer;
+    border-radius: 3px;
+    transition: background 150ms;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.07);
+    }
+
+    &.tts-active {
+      background: rgba(0, 209, 255, 0.25);
+      outline: 1px solid rgba(0, 209, 255, 0.55);
+      outline-offset: 1px;
+      box-decoration-break: clone;
+    }
+  }
+
   ruby {
     ruby-align: center;
   }
@@ -844,47 +863,4 @@ $panel-border-light: rgba(0, 0, 0, 0.12);
   }
 }
 
-// TTS VIEW
-.tts-container {
-  margin: 0 auto;
-  padding: 80px 24px 120px;
-  box-sizing: border-box;
-}
 
-.tts-sentence {
-  display: inline;
-  cursor: pointer;
-  padding: 2px 2px;
-  border-radius: 3px;
-  transition: background 150ms, color 150ms, opacity 150ms;
-
-  &:hover {
-    background: rgba(255, 255, 255, 0.07);
-  }
-
-  &.tts-active {
-    background: rgba(0, 209, 255, 0.18);
-    color: #00d1ff;
-    border-radius: 4px;
-    outline: 1px solid rgba(0, 209, 255, 0.4);
-    outline-offset: 1px;
-  }
-
-  &.tts-played {
-    opacity: 0.35;
-  }
-}
-
-.tts-container.light {
-  .tts-sentence {
-    &:hover {
-      background: rgba(0, 0, 0, 0.06);
-    }
-
-    &.tts-active {
-      background: rgba(0, 102, 204, 0.14);
-      color: #0055aa;
-      outline-color: rgba(0, 102, 204, 0.4);
-    }
-  }
-}
