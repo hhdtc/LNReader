@@ -16,6 +16,8 @@
 | *阅读器 — 显示设置* | *阅读器 — 翻译面板* |
 | ![设置页](docs/screenshots/07-settings.png) | |
 | *设置 — 翻译与 TTS 配置* | |
+| ![OPDS 目录](docs/screenshots/09-opds.png) | |
+| *OPDS — 目录浏览与外部源* | |
 
 ---
 
@@ -36,6 +38,11 @@
 ### 📥 从哔哩轻小说下载
 - 在任意搜索结果上点击 **Download**——后端抓取小说（目录、多页章节、插图）并打包成 EPUB，然后像上传一样直接注册到你的书库
 - 后台任务，结果卡片实时显示进度（`12 / 620`），可中途取消；完成后变为 **READ**
+
+### 📡 OPDS（开放出版物分发系统）
+- **OPDS 服务器**：书库以标准 OPDS 1.x 目录对外发布（`/opds`、`/opds/catalog`、`/opds/search`、`/opds/opensearch.xml`），任何 OPDS 客户端（Foliate、KOReader、Thorium…）都可浏览、搜索并下载你的书籍——书库页导航栏 →「OPDS」即可看到本机目录地址
+- **OPDS 客户端**：在 `/opds` 页添加任意外部 OPDS 目录 URL，即可在应用内浏览（支持多层级子目录）、搜索，并一键 **DOWNLOAD & READ**——下载的 EPUB 直接注册进书库，自动跳转到阅读器
+- 支持平铺/分页浏览、封面展示、搜索模板（`{searchTerms}` 内联或 OpenSearch 描述解析）、通用外链获取（无扩展名的 /download/123 链接按 Content-Type 识别）
 
 ### 📖 阅读器
 - **滚动模式**——虚拟 DOM 窗口化，流畅阅读长文

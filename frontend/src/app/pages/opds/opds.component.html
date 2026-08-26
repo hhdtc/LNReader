@@ -1,0 +1,191 @@
+<div class="opds-page">
+  <!-- HEADER -->
+  <header class="site-header">
+    <div class="header-brand">
+      <svg width="24" height="24" viewBox="0 0 40 40" fill="none">
+        <rect x="4" y="4" width="32" height="32" rx="2" stroke="#00d1ff" stroke-width="1.5"/>
+        <path d="M12 28L20 12L28 28M15 23H25" stroke="#00d1ff" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <span class="header-title">LNreader</span>
+    </div>
+    <nav class="header-nav">
+      <a routerLink="/library" class="nav-link">LIBRARY</a>
+      <a routerLink="/opds" class="nav-link active">OPDS</a>
+      <a routerLink="/settings" class="nav-link">SETTINGS</a>
+    </nav>
+    <div class="header-user" *ngIf="auth.user()">
+      <img [src]="auth.user()!.picture" [alt]="auth.user()!.name" class="user-avatar" (error)="$any($event.target).style.display='none'">
+      <span class="user-name">{{ auth.user()!.name }}</span>
+    </div>
+  </header>
+
+  <!-- MAIN CONTENT -->
+  <main class="opds-main">
+    <!-- PAGE TITLE -->
+    <div class="page-header">
+      <div class="page-title-group">
+        <span class="page-label">OPEN PUBLICATION DISTRIBUTION SYSTEM</span>
+        <h1 class="page-title">OPDS CATALOG</h1>
+      </div>
+      <div class="title-decoration">
+        <div class="deco-line"></div>
+        <span class="book-count">{{ sources().length }} CATALOGS</span>
+      </div>
+    </div>
+
+    <!-- THIS INSTANCE'S CATALOG URL -->
+    <div class="server-bar">
+      <span class="server-label">YOUR CATALOG URL</span>
+      <code class="server-url">{{ serverUrl() }}</code>
+      <button class="btn-copy" (click)="copyServerUrl()">{{ copied() ? 'COPIED ✓' : 'COPY' }}</button>
+    </div>
+
+    @if (error()) {
+      <div class="error-banner">
+        <span class="error-icon">!</span>
+        {{ error() }}
+      </div>
+    }
+
+    <!-- EXTERNAL CATALOG SOURCES -->
+    <section class="sources-section">
+      <div class="section-heading">
+        <h2>EXTERNAL CATALOGS</h2>
+        <span class="section-hint">BROWSE &amp; IMPORT FROM OTHER OPDS SERVERS</span>
+      </div>
+
+      <div class="add-source-row">
+        <input
+          class="source-input"
+          type="text"
+          [value]="newName()"
+          (input)="onNameInput($event)"
+          placeholder="NAME (ANY LABEL)"
+          autocomplete="off">
+        <input
+          class="source-input source-input-url"
+          type="text"
+          [value]="newUrl()"
+          (input)="onUrlInput($event)"
+          (keyup.enter)="addSource()"
+          placeholder="https://catalog.example.com/feed.xml"
+          autocomplete="off">
+        <button class="btn-add" (click)="addSource()" [disabled]="adding() || !newName().trim() || !newUrl().trim()">
+          {{ adding() ? 'ADDING...' : 'ADD' }}
+        </button>
+      </div>
+
+      @if (sources().length) {
+        <div class="sources-list">
+          @for (src of sources(); track src.id) {
+            <div class="source-item">
+              <button class="source-open" (click)="openSource(src)">
+                <span class="source-name">{{ src.name }}</span>
+                <span class="source-url">{{ src.url }}</span>
+              </button>
+              <button class="source-remove" (click)="removeSource(src)" title="Remove catalog">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+          }
+        </div>
+      } @else {
+        <div class="empty-hint">NO CATALOGS YET — ADD ONE ABOVE</div>
+      }
+    </section>
+
+    <!-- CATALOG BROWSING -->
+    <section class="browse-section">
+      @if (feed(); as f) {
+        <div class="browse-nav-row">
+          <button class="btn-bar" (click)="backToSources()">‹ CATALOGS</button>
+          @if (canGoBack()) {
+            <button class="btn-bar" (click)="goBack()">‹ BACK</button>
+          }
+          <div class="browse-title">
+            <h2>{{ f.title }}</h2>
+            @if (f.subtitle) {
+              <span class="browse-subtitle">{{ f.subtitle }}</span>
+            }
+          </div>
+          @if (f.total_results != null) {
+            <span class="browse-count">{{ f.total_results }} RESULTS</span>
+          }
+        </div>
+
+        @if (f.search_url) {
+          <div class="search-row">
+            <input
+              class="search-input"
+              type="text"
+              [value]="searchQuery()"
+              (input)="onSearchInput($event)"
+              (keyup.enter)="searchFeed()"
+              placeholder="SEARCH THIS CATALOG"
+              autocomplete="off">
+            <button class="search-btn" (click)="searchFeed()" [disabled]="searching()">
+              {{ searching() ? '...' : 'SEARCH' }}
+            </button>
+          </div>
+        }
+      }
+
+      @if (browsing()) {
+        <div class="loading-state">
+          <div class="loading-spinner"></div>
+          <span>LOADING CATALOG...</span>
+        </div>
+      } @else if (feed(); as f) {
+        <div class="entries-grid">
+          @for (entry of f.entries; track entry.id + (entry.acquisition_url ?? '') + (entry.subsection_url ?? '')) {
+            <div class="entry-card">
+              <div class="entry-cover">
+                @if (entry.cover_url) {
+                  <img
+                    [src]="entry.cover_url"
+                    [alt]="entry.title"
+                    loading="lazy"
+                    (error)="$any($event.target).style.display='none'">
+                } @else {
+                  <div class="cover-placeholder">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                    </svg>
+                  </div>
+                }
+              </div>
+              <div class="entry-body">
+                <h3 class="entry-title">{{ entry.title }}</h3>
+                @if (entry.author) {
+                  <div class="entry-author">{{ entry.author }}</div>
+                }
+                @if (entry.summary) {
+                  <p class="entry-summary">{{ entry.summary }}</p>
+                }
+                <div class="entry-actions">
+                  @if (entry.subsection_url) {
+                    <button class="btn-open" (click)="openSubsection(entry)">OPEN</button>
+                  }
+                  @if (entry.acquisition_url) {
+                    <button class="btn-download" (click)="downloadEntry(entry)" [disabled]="isDownloading(entry)">
+                      {{ isDownloading(entry) ? 'DOWNLOADING...' : 'DOWNLOAD & READ' }}
+                    </button>
+                  }
+                </div>
+              </div>
+            </div>
+          } @empty {
+            <div class="empty-hint">NO ENTRIES IN THIS CATALOG</div>
+          }
+        </div>
+
+        @if (f.next_url) {
+          <div class="load-more-row">
+            <button class="btn-more" (click)="loadMore()">LOAD MORE</button>
+          </div>
+        }
+      }
+    </section>
+  </main>
+</div>

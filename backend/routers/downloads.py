@@ -9,8 +9,7 @@ from sqlalchemy.orm import Session
 from database import get_db, Book, BookDownloadJob, SessionLocal
 from schemas import DownloadStartRequest, DownloadJobResponse
 from services.bilinovel_downloader import BilinovelDownloader, BilinovelError
-from services.book_parser import parse_epub
-from services.japanese import detect_language
+from services.ingest import register_book_file
 
 router = APIRouter(prefix="/api/downloads", tags=["downloads"])
 
@@ -38,38 +37,6 @@ def _job_response(job: BookDownloadJob) -> DownloadJobResponse:
 
 
 # ---------- background worker ----------
-
-def _register_epub(path: str) -> Book:
-    """Register a downloaded EPUB into the library (mirrors upload_book)."""
-    title, author, chapters, cover_bytes = parse_epub(path)
-    total_chapters = len(chapters)
-
-    cover_path = None
-    if cover_bytes:
-        cover_file = path[:-5] + "_cover.jpg"
-        with open(cover_file, "wb") as cf:
-            cf.write(cover_bytes)
-        cover_path = os.path.basename(cover_file)
-
-    language = "unknown"
-    if total_chapters > 0:
-        sample = ""
-        for ch in chapters[:5]:
-            sample += ch.get("content", "")
-            if len(sample) >= 2000:
-                break
-        language = detect_language(sample)
-
-    book = Book(
-        title=title,
-        author=author,
-        file_path=path,
-        file_type="epub",
-        cover_path=cover_path,
-        language=language,
-        total_chapters=total_chapters,
-    )
-    return book
 
 
 def _run_download(job_id: int):
@@ -148,7 +115,7 @@ def _run_download(job_id: int):
 
         build_epub(meta, volumes, chapter_htmls, images, dest_path)
 
-        book = _register_epub(dest_path)
+        book = register_book_file(dest_path)
         db.add(book)
         db.commit()
         db.refresh(book)

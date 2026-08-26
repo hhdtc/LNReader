@@ -120,6 +120,15 @@ class BookDownloadJob(Base):
     completed_at = Column(DateTime, nullable=True)
 
 
+class OpdsSource(Base):
+    __tablename__ = "opds_sources"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False)
+    url = Column(String(1000), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 def get_db():
     db = SessionLocal()
     try:

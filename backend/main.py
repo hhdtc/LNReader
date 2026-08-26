@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from database import init_db
-from routers import auth, books, progress, translate, settings, tts, voicebox, listening, search, downloads
+from routers import auth, books, progress, translate, settings, tts, voicebox, listening, search, downloads, opds
 
 load_dotenv()
 
@@ -38,6 +38,8 @@ app.include_router(voicebox.router)
 app.include_router(listening.router)
 app.include_router(search.router)
 app.include_router(downloads.router)
+app.include_router(opds.server_router)
+app.include_router(opds.client_router)
 
 
 @app.on_event("startup")

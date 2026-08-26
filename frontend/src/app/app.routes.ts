@@ -7,6 +7,10 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/library/library.component').then(m => m.LibraryComponent),
   },
   {
+    path: 'opds',
+    loadComponent: () => import('./pages/opds/opds.component').then(m => m.OpdsComponent),
+  },
+  {
     path: 'reader/:id',
     loadComponent: () => import('./pages/reader/reader.component').then(m => m.ReaderComponent),
   },

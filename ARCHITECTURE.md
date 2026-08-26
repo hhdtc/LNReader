@@ -31,6 +31,7 @@
    - [Bilinovel Download (→ EPUB → library)](#712-bilinovel-download--epub--library)
    - [Task Center](#713-task-center-library-page)
 8. [Configuration & Infrastructure](#8-configuration--infrastructure)
+9. [OPDS (Open Publication Distribution System)](#9-opds-open-publication-distribution-system)
 
 ---
 
@@ -390,6 +391,7 @@ Wraps user settings in an Angular signal.
 /reader/:id   →  ReaderComponent         (guarded)
 /settings     →  SettingsComponent       (guarded)
 /listen/:id   →  ListenComponent         (guarded)
+/opds         →  OpdsComponent           (public)
 ```
 
 All page components are lazy-loaded. Proxy config forwards `/api/*` and `/auth/*` to `localhost:8000` in development.
@@ -1201,3 +1203,81 @@ On startup, `init_db()` in `database.py`:
 - Runs a list of column-level `ALTER TABLE` migrations against `user_settings` (currently: `view_mode`, `voicebox_url`, `voicebox_port`, `voicebox_profile_id`, `voicebox_language`, `voicebox_model_size`, `tts_language`) — each is added only if the `SELECT` for it fails
 - Drops the obsolete `linovelib_cookie` column if present
 - Inserts the single `UserSettings` row (id=1) if missing
+---
+
+## 9. OPDS (Open Publication Distribution System)
+
+LNreader is both an **OPDS server** — its library is published as a standard
+OPDS 1.x catalog any OPDS client (Foliate, KOReader, Thorium…) can browse
+and acquire from — and an **OPDS client** — it can register external catalog
+URLs, browse their feeds, search them, and download their books straight
+into the local library.
+
+### 9.1 OPDS Server — `/opds`
+
+All paths are unauthenticated Atom feeds (content type
+`application/atom+xml;profile=opds-catalog`), with absolute URLs derived from
+`request.base_url` (Host header).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/opds` | Navigation feed — `Library` subsection entry + search link |
+| GET | `/opds/catalog?page&page_size` | Acquisition feed of all books (paginated via `next` link, `opensearch:totalResults`) |
+| GET | `/opds/search?q` | Search feed over title/author |
+| GET | `/opds/opensearch.xml` | OpenSearch description (template `/opds/search?q={searchTerms}`) |
+| GET | `/opds/books/{id}/file` | Raw `.epub`/`.txt` acquisition target (`Content-Disposition: attachment`) |
+
+Entries carry Atom/DC metadata (title, author, language, updated), cover
+links (`http://opds-spec.org/image` + `image/thumbnail` → `/api/books/{id}/cover`)
+and an `http://opds-spec.org/acquisition/open-access` link per book. Feed
+builder: `services/opds.py` (`build_root_feed`, `build_catalog_feed`,
+`build_search_feed`, `build_opensearch_xml`).
+
+### 9.2 OPDS Client — `/api/opds`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/opds/server` | Absolute URL of this instance's catalog |
+| GET | `/api/opds/sources` | List saved catalogs |
+| POST | `/api/opds/sources` | `{name, url}` — add a catalog |
+| DELETE | `/api/opds/sources/{id}` | Remove a catalog |
+| GET | `/api/opds/browse?url&q` | Fetch + normalize a remote feed (JSON); with `q` resolves the advertised search template (inline `{searchTerms}` or via the OpenSearch description) |
+| POST | `/api/opds/acquire` | `{url}` — download a remote `.epub`/`.txt` into `BOOKS_DIR` and register it (returns `Book`) |
+
+`browse` guards: http(s) only, 30 s timeout, 10 MiB feed cap. `acquire`
+resolves the file type from URL suffix → `Content-Disposition` →
+`Content-Type` (extensionless links like `/download/123` are common in the
+wild); only EPUB/TXT are imported, streamed in 1 MiB chunks, partial files
+removed on failure. Feeds are parsed by `services/opds.py
+parse_opds_feed` (namespace-tolerant ElementTree: Atom + `dc:language`,
+OPDS rel URIs, relative-href resolution, subsection vs acquisition entries).
+
+### 9.3 Database
+
+#### `OpdsSource`
+One row per saved external catalog: `id`, `name`, `url`, `created_at`.
+Created by `Base.metadata.create_all` — no manual migration needed.
+
+### 9.4 Frontend — `OpdsComponent` (`/opds`)
+
+Nav link "OPDS CATALOG" in the library header. Page shows the instance's
+catalog URL (copy button), external-catalog management (add/remove), and a
+browser with breadcrumbs (`‹ CATALOGS`, `‹ BACK`), per-entry
+cover/title/author/summary cards, category `OPEN` (subsection links),
+`DOWNLOAD & READ` (acquire → navigate to `/reader/{id}`), catalog search
+(when the feed advertises `search_url`) and `LOAD MORE` pagination through
+`next_url`.
+
+### 9.5 Data Flow — OPDS acquire
+
+```
+User clicks DOWNLOAD & READ
+  → POST /api/opds/acquire {url: acquisition link}
+  → stream remote file into BOOKS_DIR (unique name)
+  → register_book_file() (parse_epub, cover, language detect)
+  → Book row committed → frontend routes to /reader/{id}
+```
+
+External client flow: `/opds` → `/opds/catalog` → `/opds/books/{id}/file`
+(cover via `/api/books/{id}/cover`); search via `/opds/search?q=` or the
+OpenSearch template.

@@ -6,7 +6,7 @@ import {
   Book, ChapterContent, ReadingProgress,
   UserSettings, TranslationRequest, TranslationResponse, UserInfo, ChapterSummary,
   VoiceboxProfile, AudioJobStatus, AudioStatusResponse, ListeningProgress, SearchResponse,
-  DownloadJob
+  DownloadJob, OpdsSource, OpdsFeed
 } from '../models/book.model';
 
 @Injectable({ providedIn: 'root' })
@@ -78,6 +78,32 @@ export class ApiService {
 
   cancelDownload(jobId: number): Observable<DownloadJob> {
     return this.http.post<DownloadJob>(`${this.base}/api/downloads/${jobId}/cancel`, {});
+  }
+  // OPDS
+  getOpdsSources(): Observable<OpdsSource[]> {
+    return this.http.get<OpdsSource[]>(`${this.base}/api/opds/sources`);
+  }
+
+  addOpdsSource(name: string, url: string): Observable<OpdsSource> {
+    return this.http.post<OpdsSource>(`${this.base}/api/opds/sources`, { name, url });
+  }
+
+  deleteOpdsSource(id: number): Observable<any> {
+    return this.http.delete(`${this.base}/api/opds/sources/${id}`);
+  }
+
+  getOpdsServerUrl(): Observable<{ url: string; title: string }> {
+    return this.http.get<{ url: string; title: string }>(`${this.base}/api/opds/server`);
+  }
+
+  browseOpds(url: string, q?: string): Observable<OpdsFeed> {
+    const params: { [key: string]: string } = { url };
+    if (q) params['q'] = q;
+    return this.http.get<OpdsFeed>(`${this.base}/api/opds/browse`, { params });
+  }
+
+  acquireOpdsBook(url: string): Observable<Book> {
+    return this.http.post<Book>(`${this.base}/api/opds/acquire`, { url });
   }
 
   // Progress

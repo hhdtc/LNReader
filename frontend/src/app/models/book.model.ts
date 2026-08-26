@@ -138,3 +138,33 @@ export interface DownloadJob {
   created_at: string | null;
   completed_at: string | null;
 }
+export interface OpdsSource {
+  id: number;
+  name: string;
+  url: string;
+  created_at: string | null;
+}
+
+export interface OpdsEntry {
+  title: string;
+  id: string;
+  author: string;
+  summary: string;
+  language: string;
+  updated: string | null;
+  cover_url: string | null;
+  acquisition_url: string | null;
+  acquisition_type: string | null;
+  subsection_url: string | null;
+}
+
+export interface OpdsFeed {
+  title: string;
+  subtitle: string;
+  url: string;
+  updated: string | null;
+  total_results: number | null;
+  entries: OpdsEntry[];
+  next_url: string | null;
+  search_url: string | null;
+}

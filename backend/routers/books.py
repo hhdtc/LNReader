@@ -11,7 +11,8 @@ from urllib.parse import quote
 from database import get_db, Book, ReadingProgress
 from schemas import BookResponse, ChapterContent, ChapterSummary
 from services.book_parser import parse_epub, parse_txt, clear_book_cache
-from services.japanese import detect_language, annotate_japanese
+from services.japanese import annotate_japanese
+from services.ingest import register_book_file
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -85,48 +86,7 @@ async def upload_book(file: UploadFile = File(...), db: Session = Depends(get_db
     with open(dest_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    cover_path = None
-    if suffix == ".epub":
-        try:
-            title, author, chapters, cover_bytes = parse_epub(dest_path)
-            total_chapters = len(chapters)
-            if cover_bytes:
-                cover_file = dest_path.replace(ext, "_cover.jpg")
-                with open(cover_file, "wb") as cf:
-                    cf.write(cover_bytes)
-                cover_path = os.path.basename(cover_file)
-        except Exception as e:
-            title = Path(file.filename).stem
-            author = "Unknown"
-            total_chapters = 0
-    else:
-        try:
-            title, chapters = parse_txt(dest_path)
-            total_chapters = len(chapters)
-            author = "Unknown"
-        except Exception:
-            title = Path(file.filename).stem
-            total_chapters = 0
-
-    # Detect language by sampling multiple chapters (first chapter is often front matter)
-    language = "unknown"
-    if total_chapters > 0:
-        sample = ""
-        for ch in chapters[:5]:
-            sample += ch.get("content", "")
-            if len(sample) >= 2000:
-                break
-        language = detect_language(sample)
-
-    book = Book(
-        title=title,
-        author=author,
-        file_path=dest_path,
-        file_type=suffix.lstrip("."),
-        cover_path=cover_path,
-        language=language,
-        total_chapters=total_chapters,
-    )
+    book = register_book_file(dest_path)
     db.add(book)
     db.commit()
     db.refresh(book)

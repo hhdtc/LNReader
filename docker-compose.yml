@@ -78,19 +78,19 @@ services:
   #       - app-net
   #     restart: unless-stopped
 
-  omnivoice-tts:  # OmniVoice (GPU; requires nvidia-container-toolkit)
-    build: ./omnivoice-tts
-    container_name: lnreader-omnivoice-tts
-    runtime: nvidia
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - OMNIVOICE_DEVICE=cuda:0
-    volumes:
-      - omnivoice_cache:/root/.cache/huggingface
-      - omnivoice_refaudio:/app/data
-    networks:
-      - app-net
-    restart: unless-stopped
+  # omnivoice-tts:  # OmniVoice (GPU; requires nvidia-container-toolkit)
+  #   build: ./omnivoice-tts
+  #   container_name: lnreader-omnivoice-tts
+  #   runtime: nvidia
+  #   environment:
+  #     - NVIDIA_VISIBLE_DEVICES=all
+  #     - OMNIVOICE_DEVICE=cuda:0
+  #   volumes:
+  #     - omnivoice_cache:/root/.cache/huggingface
+  #     - omnivoice_refaudio:/app/data
+  #   networks:
+  #     - app-net
+  #   restart: unless-stopped
 
   # omnivoice-tts-cpu:  # OmniVoice (CPU, no GPU required — slow; for machines without NVIDIA)
   #   build:

@@ -213,3 +213,53 @@ class DownloadJobResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# --- OPDS schemas ---
+
+class OpdsSourceCreate(BaseModel):
+    name: str
+    url: str
+
+
+class OpdsSourceResponse(BaseModel):
+    id: int
+    name: str
+    url: str
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class OpdsEntry(BaseModel):
+    title: str
+    id: str = ""
+    author: str = ""
+    summary: str = ""
+    language: str = ""
+    updated: Optional[str] = None
+    cover_url: Optional[str] = None
+    acquisition_url: Optional[str] = None
+    acquisition_type: Optional[str] = None
+    subsection_url: Optional[str] = None
+
+
+class OpdsFeedResponse(BaseModel):
+    title: str = "Untitled feed"
+    subtitle: str = ""
+    url: str
+    updated: Optional[str] = None
+    total_results: Optional[int] = None
+    entries: List[OpdsEntry] = []
+    next_url: Optional[str] = None
+    search_url: Optional[str] = None
+
+
+class OpdsAcquireRequest(BaseModel):
+    url: str
+
+
+class OpdsServerInfo(BaseModel):
+    url: str
+    title: str = "LNreader"
