@@ -581,7 +581,8 @@ Downloads run in a plain daemon `threading.Thread` (not FastAPI `BackgroundTasks
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `parse_epub` | `(file_path) → (title, author, chapters, cover_bytes)` | Uses ebooklib to extract spine items; converts HTML to chapter dicts; rewrites relative asset URLs |
-| `parse_txt` | `(file_path) → (title, chapters)` | Detects chapter breaks via regex (`第`, `Chapter`, etc.); falls back to 3000-char chunks |
+| `parse_txt` | `(file_path) → (title, chapters)` | Detects chapter breaks via regex (`第X章`, `Chapter`, aozora `<a name="N">` anchors); falls back to 3000-char chunks |
+| `decode_text` | `(bytes) → str` | Text-encoding auto-detection: BOM (UTF-8/16/32) → strict UTF-8 → legacy codecs (cp932, euc-jp, gb18030, big5) scored by kana presence (kana-less tie prefers GBK family) |
 | `clear_book_cache` | `()` | Clears the LRU parse cache |
 
 The `parse_epub` and `parse_txt` functions are decorated with `@lru_cache` keyed on file path. On `GET /api/books/{id}/content`, the router:
