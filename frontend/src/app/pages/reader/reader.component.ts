@@ -587,6 +587,22 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
       const testNodes = [...pageNodes, child];
       measurer.innerHTML = nodesToHtml(testNodes);
 
+      if (measurer.scrollHeight > vpHeight && pageNodes.length === 0) {
+        // The child alone is taller than a page (e.g. the whole chapter
+        // trapped inside an unclosed <a name="..."> anchor): split it into
+        // page-sized fragments and accumulate those instead.
+        const fragments = this.splitOverflowingNode(child, measurer, vpHeight);
+        for (const fragment of fragments) {
+          measurer.innerHTML = nodesToHtml([...pageNodes, fragment]);
+          if (measurer.scrollHeight > vpHeight && pageNodes.length > 0) {
+            pages.push(nodesToHtml(pageNodes));
+            pageNodes = [];
+          }
+          pageNodes.push(fragment);
+        }
+        continue;
+      }
+
       if (measurer.scrollHeight > vpHeight && pageNodes.length > 0) {
         // Current page is full, save it and start new page
         pages.push(nodesToHtml(pageNodes));
@@ -643,6 +659,77 @@ export class ReaderComponent implements OnInit, OnDestroy, AfterViewChecked {
     if (page < 0 || page >= this.totalPages()) return;
     this.currentPage.set(page);
     this.scheduleSave();
+  }
+
+  /**
+   * Split a single DOM node that alone exceeds the page height (e.g. a whole
+   * chapter trapped inside an unclosed <a name="..."> anchor, or one giant
+   * paragraph from a converted TXT). Elements with children are flattened
+   * into their children; text-only leaves are sliced so each fragment fits.
+   */
+  private splitOverflowingNode(node: Node, measurer: HTMLElement, vpHeight: number): Node[] {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent ?? '';
+      return this.splitTextChunks(text, measurer, vpHeight).map((t) => document.createTextNode(t));
+    }
+
+    const el = node as HTMLElement;
+    const children = Array.from(el.childNodes);
+    if (children.length > 0) {
+      const parts: Node[] = [];
+      for (const child of children) {
+        if (child.nodeType === Node.TEXT_NODE && !child.textContent?.trim()) continue;
+        parts.push(...this.splitOverflowingNode(child, measurer, vpHeight));
+      }
+      return parts.length > 0 ? parts : [node];
+    }
+
+    // Leaf element (e.g. <p>): keep the tag, split its text.
+    const text = el.textContent ?? '';
+    return this.splitTextChunks(text, measurer, vpHeight).map((t) => {
+      const clone = el.cloneNode(false) as HTMLElement;
+      clone.textContent = t;
+      return clone;
+    });
+  }
+
+  /** Binary-search the largest slice of `text` that fits in one page. */
+  private splitTextChunks(text: string, measurer: HTMLElement, vpHeight: number): string[] {
+    if (!text) return [''];
+    const fits = (chars: number): boolean => {
+      measurer.innerHTML = '';
+      measurer.appendChild(document.createTextNode(text.slice(0, chars)));
+      return measurer.scrollHeight <= vpHeight;
+    };
+
+    let lo = 1;
+    let hi = text.length;
+    let maxChars = 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (fits(mid)) {
+        maxChars = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+
+    const chunks: string[] = [];
+    let pos = 0;
+    while (pos < text.length) {
+      let take = Math.min(maxChars, text.length - pos);
+      if (pos + take < text.length) {
+        // Snap back to a word/line boundary when possible.
+        const nl = text.lastIndexOf('\n', pos + take - 1);
+        const sp = text.lastIndexOf(' ', pos + take - 1);
+        const cut = Math.max(nl, sp);
+        if (cut > pos + take * 0.5) take = cut - pos + 1;
+      }
+      chunks.push(text.slice(pos, pos + take));
+      pos += take;
+    }
+    return chunks;
   }
 
   nextPage() {

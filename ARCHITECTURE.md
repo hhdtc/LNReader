@@ -884,6 +884,11 @@ recalcPages()
        - if div.scrollHeight > vpHeight:
            - remove last node; save current HTML as page N
            - start new page with this node
+  4b. If a single child alone overflows (whole chapter trapped in an
+       unclosed `<a name="...">` anchor, a giant converted paragraph):
+       splitOverflowingNode() flattens element children and binary-searches
+       text slices that fit (snapping to word/line boundaries), then the
+       fragments accumulate as usual
   5. Save last partial page
   6. Store all pages in `pages` signal
   7. Navigate to saved pageIndex (from progress) or page 0
